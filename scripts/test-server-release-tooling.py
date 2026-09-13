@@ -30,7 +30,7 @@ class ReleaseToolingTests(unittest.TestCase):
         spec.loader.exec_module(writer)
         identity = json.loads((SCRIPT.parent.parent / "host-monitoring-server/release.json").read_text())
         identity["source_revision"] = "a" * 40
-        for revision, accepted in [(4, True), (3, False)]:
+        for revision, accepted in [(5, True), (4, False)]:
             identity["schema_revision"] = revision
             result = MagicMock(returncode=0, stderr=b"", stdout=(json.dumps(identity) + "\n").encode())
             with patch.object(writer.subprocess, "run", return_value=result):
