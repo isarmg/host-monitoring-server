@@ -2,7 +2,7 @@ name: Release build
 
 on:
   push:
-    tags: [v0.9.11]
+    tags: ['v*']
 
 permissions: {}
 
@@ -61,11 +61,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="docs/releases/${version}.md"
+          test -f "$notes"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Refusing to reuse or overwrite existing release $GITHUB_REF_NAME" >&2
             exit 1
           fi
           gh release create "$GITHUB_REF_NAME" release-output/* \
             --verify-tag \
-            --notes-file docs/releases/0.9.11.md \
+            --notes-file "$notes" \
             --title "Host Monitoring Server $GITHUB_REF_NAME"
