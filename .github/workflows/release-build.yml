@@ -2,7 +2,7 @@ name: Release build
 
 on:
   push:
-    tags: [v0.9.10]
+    tags: [v0.9.11]
 
 permissions: {}
 
@@ -67,5 +67,5 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" release-output/* \
             --verify-tag \
-            --notes-file docs/releases/0.9.10.md \
+            --notes-file docs/releases/0.9.11.md \
             --title "Host Monitoring Server $GITHUB_REF_NAME"

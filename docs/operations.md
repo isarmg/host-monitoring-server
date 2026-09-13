@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.10/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.11/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.10/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.10
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.11/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.11
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.10/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.10` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.11` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -148,7 +148,7 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.10
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.11
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 host-monitoring-server admin-reset-password --database-url sqlite:///path/app.db \
@@ -206,7 +206,7 @@ WiX 4 MSI 同时安装 Windows Service、Tray 和维护 helper。Tray 是用户�
 主体；两者通过受保护本机控制通道通信。构建/验收使用：
 
 ```powershell
-clients\host-monitor\packaging\windows\wix\build-msi.cmd 0.9.10 `
+clients\host-monitor\packaging\windows\wix\build-msi.cmd 0.9.11 `
   target\x86_64-pc-windows-msvc\release\host-monitor.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-tray.exe
@@ -248,7 +248,7 @@ notarization/stapling，并保存签名者、时间戳、摘要和验证结果�
 
 ## 9. 数据库身份与当前不支持的数据操作
 
-Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、version `0.9.10`、
+Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、version `0.9.11`、
 schema revision `3` 与 SHA-256
 `233c8b12e9b09bc8a4f3dfa57309e5bc268de0aa958e8e0eb45555d75f94c410`；现场 `sqlite_schema` 重新计算也
 必须一致。当前 DDL 中管理员列是 `_sarmg_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical
