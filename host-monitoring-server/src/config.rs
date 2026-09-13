@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use clap::{Parser, Subcommand};
 
 use crate::retention::RetentionConfig;
@@ -68,6 +69,7 @@ pub struct ValidatedConfig {
     pub telemetry: TelemetryWriterConfig,
     pub retention: RetentionConfig,
     pub static_dir: PathBuf,
+    pub client_authorization_key: [u8; 32],
 }
 
 impl ValidatedConfig {
@@ -137,6 +139,14 @@ impl ValidatedConfig {
             telemetry,
             retention,
             static_dir,
+            client_authorization_key: STANDARD
+                .decode(required("HOST_MONITORING_CLIENT_AUTHORIZATION_KEY")?)?
+                .try_into()
+                .map_err(|_| {
+                    anyhow::anyhow!(
+                        "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY must decode to exactly 32 bytes"
+                    )
+                })?,
         })
     }
 }

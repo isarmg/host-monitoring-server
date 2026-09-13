@@ -213,16 +213,21 @@ export type ClientInstance = {
   request_id: string; instance_id: string; display_name: string;
   status: "pending" | "active" | "cancelled";
   created_at: string;
+  authorization_code: string;
 };
 export type CreatedInstance = ClientInstance & { activation_code: string };
-const INSTANCE_KEYS = ["request_id", "instance_id", "display_name", "status", "created_at"];
+const INSTANCE_KEYS = ["request_id", "instance_id", "display_name", "status", "created_at", "authorization_code"];
 function instanceFields(value: Record<string, unknown>): boolean {
   return isUuid(value.request_id) && isUuid(value.instance_id) && isText(value.display_name)
     && ["pending", "active", "cancelled"].includes(String(value.status))
-    && isUtcTimestamp(value.created_at);
+    && isUtcTimestamp(value.created_at) && typeof value.authorization_code === "string"
+    && /^uci_[0-9a-f]{32}$/.test(value.authorization_code);
 }
 export function isInstances(value: unknown): value is ClientInstance[] {
   return Array.isArray(value) && value.length <= 200 && value.every(item => isRecordWithExactKeys(item, INSTANCE_KEYS) && instanceFields(item));
+}
+export function isInstance(value: unknown): value is ClientInstance {
+  return isRecordWithExactKeys(value, INSTANCE_KEYS) && instanceFields(value);
 }
 export function isCreatedInstance(value: unknown): value is CreatedInstance {
   return isRecordWithExactKeys(value, [...INSTANCE_KEYS, "activation_code"]) && instanceFields(value)

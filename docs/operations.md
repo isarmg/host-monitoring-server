@@ -106,14 +106,15 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 | `GET /api/v2/monitoring/hosts` | 管理员 Session | query 只有 `limit/offset`；服务端钳到 1..1000，默认 200 | 分页 Host summary；当前 React 页只调用这一条业务 API |
 | `GET /api/v2/monitoring/hosts/{host_id}` | 管理员 Session | canonical UUID | Host summary 与可空 latest 原始报告；Web 的「新建实例」调用 |
 | `GET /api/v2/monitoring/hosts/{host_id}/history` | 管理员 Session | `from/to/limit`；`from <= to`；limit 1..1000，默认 300 | 仍保留的 raw 标量点；不读取 hourly aggregate |
-| `GET/POST /api/v2/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，配对码不设有效期 | 列表最多 200 条；新建 `201` 只返回一次 activation code 并设 `no-store`；React 尚未调用 |
+| `GET/POST /api/v2/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，授权码不设有效期 | 列表最多 200 条并返回可查看的实例授权码；新建 `201`；成功响应 `no-store` |
+| `PUT /api/v2/monitoring/client-instances/{request_id}/authorization` | 管理员 Session + CSRF + 同源 | canonical UUID；exact `authorization_code`，当前 `uci_` 格式 | 更新加密密文/摘要、撤销旧 Client credential，并将实例恢复为 pending；Client 需重新配对 |
 | `DELETE /api/v2/monitoring/client-instances/{request_id}` | 管理员 Session + CSRF + 同源 | canonical UUID，只能取消 pending invite | `204`；不存在为 404，非 pending 为 409 |
 | `POST /api/v2/host-monitor/activate-admin` | 管理员 Session + CSRF + 同源 | 16 KiB 管理上限；exact request ID + activation code | 与 capability 激活进入同一事务；React 尚未调用 |
 | `PATCH/DELETE /api/v2/monitoring/managed-instances/{host_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；PATCH remark trim 后 1..255 UTF-8 bytes | `204`；PATCH 是 last-write-wins，无 ETag/revision；DELETE 永久级联删除且没有产品内恢复 |
 | `POST /api/v2/host-monitor/pairing-requests` | 未配对 Client | Client 路由组 512 KiB；strict Host、bearer/polling-secret SHA-256；来源/设备/容量限流 | 创建或幂等恢复 pairing request；返回 activation URL，成功 `no-store` |
 | `GET /api/v2/host-monitor/pairing-requests/{request_id}` | 持有 request ID 的调用方 | canonical UUID；来源/请求限流 | 只暴露 OS/arch/version/status/expiry 公共摘要；成功 `no-store` |
 | `POST /api/v2/host-monitor/pairing-requests/{request_id}/status` | Client 的 `Pairing <polling_secret>` | 512 KiB 组上限；secret 32..256 字符且无 whitespace | waiting/active/denied/expired 与可空 instance ID；成功 `no-store` |
-| `POST /api/v2/host-monitor/activate` | 持有一次性 activation code 的 capability 调用方 | 512 KiB 组上限；来源/请求限流；不是管理员 Session | 激活同一事务状态机；配对码错误/取消/跨设备重用严格失败；短期设备请求仍有超时保护；成功 `no-store` |
+| `POST /api/v2/host-monitor/activate` | 持有实例 authorization code 的 capability 调用方 | 512 KiB 组上限；来源/请求限流；不是管理员 Session | 激活同一事务状态机；授权码错误/取消/跨实例使用严格失败；短期设备请求仍有超时保护；成功 `no-store` |
 | `POST /api/v2/host-monitor/report` | `Bearer <client credential>` | 512 KiB；单份 strict report；每 Host 速率桶 | 持久事务提交后才返回 `202`；同 Host 同 ID 重放 `accepted=false` |
 
 登录与管理写操作的同源裁决会把所有原始 `Origin`、`Host`/HTTP/2 authority、`Sec-Fetch-Site` 值交给

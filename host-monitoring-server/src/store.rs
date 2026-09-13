@@ -101,6 +101,7 @@ pub enum CreateInviteResult {
 
 pub async fn create_invite(
     pool: &SqlitePool,
+    secrets: &crate::crypto::SecretBox,
     display_name: &str,
     actor: &str,
 ) -> anyhow::Result<(CreateInviteResult, Option<String>)> {
@@ -108,18 +109,20 @@ pub async fn create_invite(
     let instance_id = Uuid::new_v4();
     let activation_code = format!("uci_{}", Uuid::new_v4().simple());
     let activation_hash = crate::token_hash(&activation_code);
+    let authorization_code_enc = secrets.encrypt(instance_id, &activation_code)?;
     let created_at = Utc::now();
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
         r#"INSERT INTO client_instance_invites(
-               invite_id,instance_id,activation_code_hash,display_name,created_at
-           ) VALUES(?,?,?,?,?)
+               invite_id,instance_id,activation_code_hash,authorization_code_enc,display_name,created_at
+           ) VALUES(?,?,?,?,?,?)
            ON CONFLICT (instance_id) WHERE status='pending' DO NOTHING
-           RETURNING invite_id,instance_id,display_name,status,created_at"#,
+           RETURNING invite_id,instance_id,display_name,status,created_at,authorization_code_enc"#,
     )
     .bind(invite_id)
     .bind(instance_id)
     .bind(&activation_hash)
+    .bind(authorization_code_enc)
     .bind(display_name)
     .bind(created_at)
     .fetch_optional(&mut *tx)
@@ -138,24 +141,116 @@ pub async fn create_invite(
     .await?;
     tx.commit().await?;
     Ok((
-        CreateInviteResult::Created(client_instance(&row)?),
+        CreateInviteResult::Created(client_instance(&row, secrets)?),
         Some(activation_code),
     ))
 }
 
-pub async fn list_invites(pool: &SqlitePool) -> anyhow::Result<Vec<ClientInstanceSummary>> {
+pub async fn list_invites(
+    pool: &SqlitePool,
+    secrets: &crate::crypto::SecretBox,
+) -> anyhow::Result<Vec<ClientInstanceSummary>> {
     let rows = sqlx::query(
-        r#"SELECT invite_id,instance_id,display_name,created_at,status
+        r#"SELECT invite_id,instance_id,display_name,created_at,status,authorization_code_enc
            FROM client_instance_invites
            ORDER BY created_at DESC LIMIT 200"#,
     )
     .fetch_all(pool)
     .await?;
-    rows.iter().map(client_instance).collect()
+    rows.iter()
+        .map(|row| client_instance(row, secrets))
+        .collect()
+}
+
+pub async fn validate_invite_authorizations(
+    pool: &SqlitePool,
+    secrets: &crate::crypto::SecretBox,
+) -> anyhow::Result<()> {
+    for row in sqlx::query(
+        "SELECT instance_id,activation_code_hash,authorization_code_enc \
+         FROM client_instance_invites ORDER BY instance_id",
+    )
+    .fetch_all(pool)
+    .await?
+    {
+        let instance_id = row.try_get::<Uuid, _>("instance_id")?;
+        let code = secrets.decrypt(
+            instance_id,
+            &row.try_get::<Vec<u8>, _>("authorization_code_enc")?,
+        )?;
+        crate::model::validate_activation_code(&code)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        anyhow::ensure!(
+            row.try_get::<String, _>("activation_code_hash")? == crate::token_hash(&code),
+            "stored client authorization digest does not match its encrypted value"
+        );
+    }
+    Ok(())
+}
+
+pub async fn rotate_invite_authorization(
+    pool: &SqlitePool,
+    secrets: &crate::crypto::SecretBox,
+    invite_id: Uuid,
+    authorization_code: &str,
+    actor: &str,
+) -> anyhow::Result<Option<ClientInstanceSummary>> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let row = sqlx::query(
+        "SELECT instance_id FROM client_instance_invites WHERE invite_id = ? AND status != 'cancelled'",
+    )
+    .bind(invite_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(row) = row else { return Ok(None) };
+    let instance_id: Uuid = row.try_get("instance_id")?;
+    let encoded = secrets.encrypt(instance_id, authorization_code)?;
+    let now = Utc::now();
+    sqlx::query(
+        "UPDATE client_instance_invites SET activation_code_hash = ?, authorization_code_enc = ?, \
+         status = 'pending', activated_at = NULL WHERE invite_id = ?",
+    )
+    .bind(crate::token_hash(authorization_code))
+    .bind(encoded)
+    .bind(invite_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE client_credentials SET revoked_at = ? WHERE host_id = ? AND revoked_at IS NULL",
+    )
+    .bind(now)
+    .bind(instance_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE monitored_hosts SET lifecycle_status = 'revoked', revoked_at = ? WHERE host_id = ?",
+    )
+    .bind(now)
+    .bind(instance_id)
+    .execute(&mut *tx)
+    .await?;
+    audit(
+        &mut tx,
+        "monitoring.client_instance.authorization.rotate",
+        &instance_id.to_string(),
+        None,
+        actor,
+    )
+    .await?;
+    tx.commit().await?;
+    let row = sqlx::query(
+        "SELECT invite_id,instance_id,display_name,created_at,status,authorization_code_enc \
+         FROM client_instance_invites WHERE invite_id = ?",
+    )
+    .bind(invite_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(Some(client_instance(&row, secrets)?))
 }
 
 pub enum CancelInviteResult {
     Cancelled,
+    Deleted,
     NotFound,
     NotPending,
 }
@@ -175,11 +270,30 @@ pub async fn cancel_invite(
         tx.rollback().await?;
         return Ok(CancelInviteResult::NotFound);
     };
-    if row.try_get::<String, _>("status")? != "pending" {
+    let status = row.try_get::<String, _>("status")?;
+    let instance_id: Uuid = row.try_get("instance_id")?;
+    if status == "cancelled" {
+        sqlx::query("DELETE FROM client_pairing_requests WHERE invite_id=? OR (requested_host_id=? AND status IN ('pending','denied'))")
+            .bind(invite_id).bind(instance_id).execute(&mut *tx).await?;
+        audit(
+            &mut tx,
+            "monitoring.client_instance.invite.delete",
+            &instance_id.to_string(),
+            Some(&format!("invite_id={invite_id}")),
+            actor,
+        )
+        .await?;
+        sqlx::query("DELETE FROM client_instance_invites WHERE invite_id=?")
+            .bind(invite_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        return Ok(CancelInviteResult::Deleted);
+    }
+    if status != "pending" {
         tx.rollback().await?;
         return Ok(CancelInviteResult::NotPending);
     }
-    let instance_id: Uuid = row.try_get("instance_id")?;
     sqlx::query(
         "UPDATE client_instance_invites SET status='cancelled',cancelled_at=? WHERE invite_id=?",
     )
@@ -199,13 +313,21 @@ pub async fn cancel_invite(
     Ok(CancelInviteResult::Cancelled)
 }
 
-fn client_instance(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<ClientInstanceSummary> {
+fn client_instance(
+    row: &sqlx::sqlite::SqliteRow,
+    secrets: &crate::crypto::SecretBox,
+) -> anyhow::Result<ClientInstanceSummary> {
+    let instance_id = row.try_get::<Uuid, _>("instance_id")?;
     Ok(ClientInstanceSummary {
         request_id: row.try_get::<Uuid, _>("invite_id")?.to_string(),
-        instance_id: row.try_get::<Uuid, _>("instance_id")?.to_string(),
+        instance_id: instance_id.to_string(),
         display_name: row.try_get("display_name")?,
         status: row.try_get("status")?,
         created_at: row.try_get("created_at")?,
+        authorization_code: secrets.decrypt(
+            instance_id,
+            &row.try_get::<Vec<u8>, _>("authorization_code_enc")?,
+        )?,
     })
 }
 
@@ -434,7 +556,9 @@ pub async fn activate(
     let token_hash: String = pairing.try_get("token_hash")?;
     sqlx::query(
         "INSERT INTO monitored_hosts(host_id,name,os,os_version,kernel_version,arch,client_version,registered_at,last_seen_at) \
-         VALUES(?,?,?,?,?,?,?,?,?)",
+         VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(host_id) DO UPDATE SET name=excluded.name,os=excluded.os, \
+         os_version=excluded.os_version,kernel_version=excluded.kernel_version,arch=excluded.arch, \
+         client_version=excluded.client_version,last_seen_at=excluded.last_seen_at,lifecycle_status='active',revoked_at=NULL",
     ).bind(instance_id).bind(invite.try_get::<String,_>("display_name")?)
       .bind(pairing.try_get::<String,_>("os")?).bind(pairing.try_get::<Option<String>,_>("os_version")?)
       .bind(pairing.try_get::<Option<String>,_>("kernel_version")?).bind(pairing.try_get::<String,_>("arch")?)

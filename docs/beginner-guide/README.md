@@ -35,7 +35,7 @@ host-protocol
 
 host-monitor
   ├─ collectors/：平台采集器
-  ├─ pairing/：一次性配对与原子凭据提交
+  ├─ pairing/：实例授权码配对与原子凭据提交
   ├─ delivery/：批次投递、重试和 spool
   ├─ mobile.rs：Android/iOS/iPadOS 宿主适配
   └─ packaging/：三桌面平台安装生命周期
@@ -108,7 +108,7 @@ host-monitor run --config /etc/host-monitor/config.json
 ```
 
 - `probe` 只验证本地采集。
-- `pair` 创建或恢复配对请求并轮询 active；打开返回的激活链接，在管理 Web 核对设备并输入一次性码。
+- `pair` 创建或恢复配对请求并轮询 active；打开返回的激活链接，在管理 Web 核对设备并输入实例授权码。
 - `once` 采集并投递一次。
 - `doctor` 默认只读检查；显式 delivery 模式才进行端到端发送。
 - `run` 是长期服务模式。
@@ -116,13 +116,13 @@ host-monitor run --config /etc/host-monitor/config.json
 
 ## 6. 配对为什么分阶段
 
-管理员管理 API 先创建 invite 并得到一次性 activation code。Client 生成 bearer/polling secret，只把摘要
+管理员管理 API 先创建实例并得到该实例的长期 authorization code。Client 生成 bearer/polling secret，只把摘要
 随 pairing request 发送，并保存 pending。code 可由受信 Tray/Client 调用公开 activation 端点提交，也可由
 已登录管理员调用受保护 activation 端点提交；Server 在一个事务中绑定 invite、request、Host 与
 credential。Client 轮询到 active 后原子写入状态，再切换 active binding。网络中断时恢复同一请求，不会
 静默生成另一套身份；明确替换未完成请求必须由用户确认。
 
-管理 Web 已补齐邀请创建、一次性激活码、设备核对、激活和取消邀请，Server 提供
+管理 Web 已补齐实例创建、授权码查看/更换、设备核对、激活和取消待配对实例，Server 提供
 `/activate/{request_id}` 的页面入口。浏览器模拟故障和隔离真实后端测试分别验证 UI 与接口流程；
 这不替代真实设备采集器验收。详见 [实例管理](../instance-management.md)。
 
@@ -153,7 +153,7 @@ SQLite writer 批量事务写入，每个报告使用 savepoint 隔离。只有�
 
 - **OTLP**：OpenTelemetry Protocol，可选的遥测额外导出目标。
 - **spool**：Client 本地有界持久重试队列。
-- **pairing**：invite、一次性 code、Client request/poll 与原子 credential 绑定组成的流程。
+- **pairing**：实例长期 authorization code、Client request/poll 与原子 credential 绑定组成的流程；服务端更换授权码会撤销旧 credential，并要求 Client 重新配对。
 - **savepoint**：SQLite 事务内部隔离单条报告失败的检查点。
 - **移动宿主 contract**：当前只是 Rust library API；仓库没有稳定 C ABI/FFI 包装、移动 UI 或 APK/IPA。
 - **fail closed**：不能证明当前身份、安全路径或数据完整时拒绝运行。

@@ -93,7 +93,7 @@ pub struct ActivateClientRequest {
     pub activation_code: String,
 }
 
-/// Borrowed serialization view used by Clients so the one-time activation code
+/// Borrowed serialization view used by Clients so the instance authorization code
 /// is not copied into an additional heap allocation before transmission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct ActivateClientRequestRef<'a> {

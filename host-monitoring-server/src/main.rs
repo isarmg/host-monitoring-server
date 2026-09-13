@@ -71,16 +71,31 @@ async fn main() -> anyhow::Result<()> {
                     false
                 }
             };
+            let secrets =
+                host_monitoring_server::crypto::SecretBox::new(config.client_authorization_key);
+            let encrypted_values_ready = store::validate_invite_authorizations(&pool, &secrets)
+                .await
+                .is_ok();
             println!(
-                "{{\"status\":\"{}\",\"bind\":\"{}\",\"database_ready\":{database_ready},\"retention_ready\":{retention_ready},\"integrity_ready\":{integrity_ready},\"foreign_keys_ready\":{foreign_keys_ready}}}",
-                if database_ready && retention_ready && integrity_ready && foreign_keys_ready {
+                "{{\"status\":\"{}\",\"bind\":\"{}\",\"database_ready\":{database_ready},\"retention_ready\":{retention_ready},\"integrity_ready\":{integrity_ready},\"foreign_keys_ready\":{foreign_keys_ready},\"encrypted_values_ready\":{encrypted_values_ready}}}",
+                if database_ready
+                    && retention_ready
+                    && integrity_ready
+                    && foreign_keys_ready
+                    && encrypted_values_ready
+                {
                     "ok"
                 } else {
                     "degraded"
                 },
                 config.bind
             );
-            if !database_ready || !retention_ready || !integrity_ready || !foreign_keys_ready {
+            if !database_ready
+                || !retention_ready
+                || !integrity_ready
+                || !foreign_keys_ready
+                || !encrypted_values_ready
+            {
                 anyhow::bail!("database is not ready");
             }
         }
@@ -124,6 +139,8 @@ async fn serve(release_root: Option<&std::path::Path>) -> anyhow::Result<()> {
         config.bootstrap_admin_password.as_deref(),
     )
     .await?;
+    let secrets = host_monitoring_server::crypto::SecretBox::new(config.client_authorization_key);
+    store::validate_invite_authorizations(&pool, &secrets).await?;
     let (_, retention_maintenance) = RetentionMaintenance::start(pool.clone(), config.retention);
     let (telemetry, telemetry_writer) = TelemetryWriter::start(pool.clone(), config.telemetry);
     let health_pool = pool.clone();
@@ -162,7 +179,8 @@ async fn serve(release_root: Option<&std::path::Path>) -> anyhow::Result<()> {
         config.administrator_origin,
         telemetry,
         runtime_handle.clone(),
-    );
+    )
+    .with_secrets(secrets);
     tracing::info!(bind=%config.bind, "host-monitoring server ready");
     runtime
         .serve(transport, router(state, config.static_dir)?)

@@ -13,6 +13,7 @@ publish = false
 futures-util = "0.3"
 anyhow = "1"
 axum = "0.8"
+base64 = "0.22"
 chrono = { version = "0.4", features = ["clock", "serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 http-body-util = "0.1"
@@ -29,6 +30,8 @@ sarmg-schema-identity.workspace = true
 sarmg-server-runtime.workspace = true
 sarmg-server-target.workspace = true
 sarmg-sqlite.workspace = true
+sarmg-secret.workspace = true
+sarmg-secret-envelope.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

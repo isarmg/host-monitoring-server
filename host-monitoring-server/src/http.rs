@@ -34,8 +34,8 @@ use crate::{
     error::{Error, FoundationErrorEnvelope, Result, database, framework_envelope},
     model::{
         CreateClientInstanceRequest, CreatedClientInstance, HistoryQuery, HistoryResponse,
-        HostDetailResponse, HostListQuery, HostListResponse, UpdateMonitoringRemarkRequest,
-        canonical_uuid, validate_pairing, validate_report,
+        HostDetailResponse, HostListQuery, HostListResponse, UpdateClientAuthorizationRequest,
+        UpdateMonitoringRemarkRequest, canonical_uuid, validate_pairing, validate_report,
     },
     store,
     telemetry::{
@@ -46,6 +46,7 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::SqlitePool,
+    pub secrets: crate::crypto::SecretBox,
     administrator: Arc<AdministratorService<SqliteAdministratorStore>>,
     administrator_origin: AdministratorOriginMode,
     runtime: sarmg_server_runtime::RuntimeHandle,
@@ -95,6 +96,7 @@ impl AppState {
         )));
         Self {
             pool,
+            secrets: crate::crypto::SecretBox::new([0x42; 32]),
             administrator,
             administrator_origin,
             runtime,
@@ -104,6 +106,11 @@ impl AppState {
             #[cfg(test)]
             _telemetry_task: None,
         }
+    }
+
+    pub fn with_secrets(mut self, secrets: crate::crypto::SecretBox) -> Self {
+        self.secrets = secrets;
+        self
     }
 
     #[cfg(test)]
@@ -272,6 +279,10 @@ pub fn router(
             axum::routing::delete(cancel_instance),
         )
         .route(
+            "/api/v2/monitoring/client-instances/{request_id}/authorization",
+            axum::routing::put(update_instance_authorization),
+        )
+        .route(
             "/api/v2/monitoring/managed-instances/{host_id}",
             axum::routing::patch(update_remark).delete(delete_host),
         )
@@ -387,9 +398,10 @@ async fn create_instance(
         .pairing_admission
         .check_invite_account(&principal.subject)?;
     let name = request.validated()?;
-    let (result, activation_code) = store::create_invite(&state.pool, &name, &principal.subject)
-        .await
-        .map_err(database)?;
+    let (result, activation_code) =
+        store::create_invite(&state.pool, &state.secrets, &name, &principal.subject)
+            .await
+            .map_err(database)?;
     match result {
         store::CreateInviteResult::Created(summary) => {
             let mut response = (
@@ -411,12 +423,41 @@ async fn create_instance(
     }
 }
 
-async fn list_instances(
+async fn list_instances(State(state): State<AppState>) -> Result<Response> {
+    Ok((
+        [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+        Json(
+            store::list_invites(&state.pool, &state.secrets)
+                .await
+                .map_err(database)?,
+        ),
+    )
+        .into_response())
+}
+
+async fn update_instance_authorization(
     State(state): State<AppState>,
-) -> Result<Json<Vec<crate::model::ClientInstanceSummary>>> {
-    Ok(Json(
-        store::list_invites(&state.pool).await.map_err(database)?,
-    ))
+    Extension(principal): Extension<Principal>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateClientAuthorizationRequest>,
+) -> Result<Response> {
+    let id = canonical_uuid(&id, "client instance request id")?;
+    let code = request.validated()?;
+    let instance = store::rotate_invite_authorization(
+        &state.pool,
+        &state.secrets,
+        id,
+        &code,
+        &principal.subject,
+    )
+    .await
+    .map_err(database)?
+    .ok_or_else(|| Error::NotFound("client instance invite not found".into()))?;
+    Ok((
+        [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+        Json(instance),
+    )
+        .into_response())
 }
 
 async fn cancel_instance(
@@ -429,12 +470,14 @@ async fn cancel_instance(
         .await
         .map_err(database)?
     {
-        store::CancelInviteResult::Cancelled => Ok(StatusCode::NO_CONTENT),
+        store::CancelInviteResult::Cancelled | store::CancelInviteResult::Deleted => {
+            Ok(StatusCode::NO_CONTENT)
+        }
         store::CancelInviteResult::NotFound => {
             Err(Error::NotFound("client instance invite not found".into()))
         }
         store::CancelInviteResult::NotPending => Err(Error::Conflict(
-            "only a pending invite can be cancelled".into(),
+            "only a pending invite can be cancelled or a cancelled invite deleted".into(),
         )),
     }
 }

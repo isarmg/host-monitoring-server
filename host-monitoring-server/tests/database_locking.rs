@@ -88,6 +88,10 @@ async fn lock_identity_survives_working_directory_and_sqlite_restarts() {
         .env("HOST_MONITORING_DATABASE_URL", "sqlite:app.sqlite3")
         .env("HOST_MONITORING_STATIC_DIR", &static_dir)
         .env("HOST_MONITORING_DEVELOPMENT", "true")
+        .env(
+            "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY",
+            "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=",
+        )
         .output()
         .expect("run doctor through a relative database path");
     assert!(
@@ -108,6 +112,10 @@ async fn lock_identity_survives_working_directory_and_sqlite_restarts() {
         .env("HOST_MONITORING_DATABASE_URL", "sqlite:app.sqlite3")
         .env("HOST_MONITORING_BIND", "127.0.0.1:0")
         .env("HOST_MONITORING_STATIC_DIR", &static_dir)
+        .env(
+            "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY",
+            "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=",
+        )
         .env("HOST_MONITORING_DEVELOPMENT", "true")
         .env(
             "HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD",

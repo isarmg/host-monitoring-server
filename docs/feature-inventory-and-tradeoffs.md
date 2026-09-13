@@ -23,7 +23,7 @@
 | HOST-012 | Client 本地单实例锁 | `clients/host-monitor/src/state_lock.rs`、`monitor_app/mod.rs` | 保障 | 中 | 两个 Client 会重复采集和投递、争用 spool | 双启动、异常锁文件、不同 state dir |
 | HOST-013 | 配对 create/poll/activate/commit 状态机 | pairing modules、Server API | 核心 | 高 | 新 Client 无法取得绑定身份 | 过期、取消、重复、重启 |
 | HOST-014 | 配对凭据只在 commit 后持久化 | pairing state/storage、atomic file | 保障 | 高 | 半完成 pairing 可能留下可用凭据或丢失绑定 | 每个崩溃点故障注入 |
-| HOST-015 | 配对按来源/request/设备/invite 管理准入，并使用一次性 activation code | `pairing_admission.rs`、`http.rs` pairing routes、`store.rs` invite/pairing tables | 保障 | 高 | 请求可耗尽内存/数据库，activation code 可被重放或错误绑定 | 过期、重复提交、每设备 4 pending、全局 4096 pending、bucket 满 |
+| HOST-015 | 配对按来源/request/设备/实例管理准入，并使用每实例长期 authorization code | `pairing_admission.rs`、`http.rs` pairing routes、`store.rs` invite/pairing tables | 保障 | 高 | 请求可耗尽内存/数据库，authorization code 可被错误绑定；轮换必须撤销旧凭据 | 过期请求、重复提交、每设备 4 pending、全局 4096 pending、轮换后重配 |
 | HOST-016 | Client `status`/`doctor` 与 delivery doctor | `monitor_app/diagnostics.rs`、`config.rs::ClientCommand` | 建议保留 | 中 | 运维只能查日志，无法快速确认绑定与队列 | 离线、损坏状态、无权限、默认 doctor 零网络、显式 delivery 写入 |
 | HOST-017 | Linux Client systemd service 生命周期 | packaging/linux、unit、scripts | 开发运维 | 高 | Linux Client 需手工保持进程和账户权限 | 当前安装、同版本重装、卸载、清理 |
 | HOST-018 | Windows service、tray 和本地控制面 | Win32、tray/control、WiX | 可选 | 高 | Windows 后台 Client 或图形配置入口消失 | ACL、service/tray IPC、MSI lifecycle |
@@ -57,7 +57,7 @@
 | HOST-046 | Session token 与 CSRF token 均为 32-byte 随机、URL-safe 43 字符 | `auth.rs`、Foundation token primitives | 保障 | 中 | 可预测或宽松 token 形状会降低熵并扩大解析面 | 长度/字符集、碰撞负例、只存 SHA-256 |
 | HOST-047 | Session 同时具有 idle 与 absolute TTL；使用时最多按 60 秒 touch 节流刷新，且永不越过 absolute | `auth_sessions`、`auth.rs::{Auth,require_console,SESSION_TOUCH_INTERVAL}` | 保障 | 高 | 无 absolute TTL 会形成长期凭据；无 idle TTL 会扩大遗留会话窗口；每请求写 touch 会放大数据库竞争 | 边界时刻、刷新不越 absolute、过期请求拒绝、短间隔请求不写；当前没有全局过期行清理 worker |
 | HOST-048 | 每个管理员会话保留有限个近期 CSRF 摘要 | `auth_session_csrf_tokens`、`MAX_CSRF_TOKENS_PER_SESSION` | 保障 | 中 | 单 token 轮换会破坏并行标签页；无限保留会持续增长 | 轮换、裁剪、并行请求、撤销级联删除 |
-| HOST-049 | 登录、Session、退出及含一次性配对材料的成功响应禁止缓存；Foundation Web client 请求统一 `cache=no-store` | `http.rs` 的显式 `Cache-Control`、`@sarmg/admin-web` | 保障 | 低 | 共享缓存可能重放 Session/CSRF/activation 数据或显示错误身份 | 各成功响应 `Cache-Control: no-store`、客户端请求；当前全局错误响应未统一加该 header，不能宣称已覆盖 |
+| HOST-049 | 登录、Session、退出及含敏感配对材料的成功响应禁止缓存；Foundation Web client 请求统一 `cache=no-store` | `http.rs` 的显式 `Cache-Control`、`@sarmg/admin-web` | 保障 | 低 | 共享缓存可能重放 Session/CSRF/authorization 数据或显示错误身份 | 各成功响应 `Cache-Control: no-store`、客户端请求；当前全局错误响应未统一加该 header，不能宣称已覆盖 |
 | HOST-050 | 修改管理员密码会提升 `session_version` 并撤销已有会话 | `store.rs`、schema trigger/session version | 保障 | 高 | 泄露的旧 Session 在改密后仍可使用 | 改密事务、当前会话失效、并发请求 |
 | HOST-051 | `serve`/`admin-create` 在已有账户时扫描每个持久 canonical username 与 current hash；`doctor` 不做这项账户扫描 | `store::ensure_admin_user/validate_stored_administrator_users`、`main.rs` | 保障 | 中 | 问题记录会等到登录时才暴露，并诱发隐式兼容路径；若误称 doctor 已覆盖会形成错误运维证据 | 任一坏 username/hash 阻止 serve，doctor 的现有范围单独验证，数据库字节不变 |
 | HOST-052 | 浏览器认证 API 固定为 Foundation 三条 `/api/v2/auth/*` | `sarmg-contracts` 常量、`http.rs`、Web client | 核心 | 中 | 路径别名会形成多套安全策略和长期维护面 | 三条正例、其他版本/尾斜杠/子路径 404 |
@@ -138,7 +138,7 @@
 | 功能 | 当前实现 | 取舍/限制 |
 |---|---|---|
 | 管理身份 | 本地 canonical username、当前 Argon2id、随机 Session/CSRF、Foundation 精确登录与 Session 形状 | 固定 `role=admin`，默认 username `admin`；没有 email、viewer/operator/RBAC，也不依赖中央账户或共享 Session |
-| 配对 | invite、一次性 code、Client request/poll、管理员或 Client 激活端点、分维度限流 | React 已提供邀请创建、一次性码、取消和设备核对后激活；真实设备采集仍须独立验收 |
+| 配对 | 每实例长期 code、Client request/poll、管理员或 Client 激活端点、分维度限流 | React 可查看/更换加密保存的授权码；更换会撤销旧 Client 并要求重新配对 |
 | 报告 API | `/api/v2/host-monitor` 当前协议 | 不注册任何平行版本或 alias |
 | API 错误 | Foundation `ErrorEnvelope`：`code/message/retryable/request_id?/details?` | 所有 `/api` 非 2xx（含 extractor/404/405）使用同一严格顶层结构 |
 | 写入 | 有界队列、单 writer、batch、savepoint | 单库单活进程，不是分布式写集群 |
@@ -220,8 +220,8 @@ Token 是敏感数据。管理员操作和遥测不应记录 Secret。只有当�
 | 能力 | 当前保证 | 明确边界 |
 |---|---|---|
 | Pending 持久化 | 网络中断恢复同一请求 | 不静默生成多套身份 |
-| 管理员授权 | 管理 API 创建 invite；code 可由管理端点或受信 Client/Tray 提交 | 当前 React 页面可创建 invite 并提交激活；设备绑定需要管理员提供的一次性 code |
-| 一次性 Secret | 只用于请求激活 | 不是长期报告 credential |
+| 管理员授权 | 管理 API 创建实例；authorization code 可由管理端点或受信 Client/Tray 提交 | 当前 React 页面可创建实例、查看/更换 code 并提交激活 |
+| 实例授权码 | 长期绑定实例，加密保存；轮换时撤销现有 Client credential | 不作为日常报告 credential，不因一次配对而删除 |
 | Active binding | 临时文件、sync、原子替换 | 不从半写文件“尽量恢复” |
 | 撤销 | Server 拒绝后续报告 | Client 不无界重试被撤销 credential |
 | 重新配对 | 用户明确动作建立新当前身份 | 不读取另一个版本状态 fallback |

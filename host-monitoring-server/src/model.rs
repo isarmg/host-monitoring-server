@@ -116,6 +116,7 @@ pub struct ClientInstanceSummary {
     pub display_name: String,
     pub status: String,
     pub created_at: DateTime<Utc>,
+    pub authorization_code: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,6 +124,33 @@ pub struct CreatedClientInstance {
     #[serde(flatten)]
     pub summary: ClientInstanceSummary,
     pub activation_code: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateClientAuthorizationRequest {
+    pub authorization_code: String,
+}
+
+impl UpdateClientAuthorizationRequest {
+    pub fn validated(self) -> Result<String> {
+        validate_activation_code(&self.authorization_code)?;
+        Ok(self.authorization_code)
+    }
+}
+
+pub fn validate_activation_code(value: &str) -> Result<()> {
+    if !value.starts_with("uci_")
+        || value.len() != 36
+        || !value[4..]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err(Error::BadRequest(
+            "authorization_code must use the current uci_ format".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]

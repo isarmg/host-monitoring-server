@@ -1,4 +1,5 @@
 pub mod config;
+pub mod crypto;
 pub mod database_lock;
 pub mod database_schema;
 pub mod error;

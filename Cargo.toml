@@ -34,6 +34,8 @@ sarmg-schema-identity = { git = "https://github.com/isarmg/sarmg-foundation-serv
 sarmg-server-runtime = { git = "https://github.com/isarmg/sarmg-foundation-server.git", rev = "89eafaf171e409e6134fa669b140f615635baf5a", version = "=0.7.6" }
 sarmg-server-target = { git = "https://github.com/isarmg/sarmg-foundation-server.git", rev = "89eafaf171e409e6134fa669b140f615635baf5a", version = "=0.7.6" }
 sarmg-sqlite = { git = "https://github.com/isarmg/sarmg-foundation-server.git", rev = "89eafaf171e409e6134fa669b140f615635baf5a", version = "=0.7.6" }
+sarmg-secret = { git = "https://github.com/isarmg/sarmg-foundation-server.git", rev = "89eafaf171e409e6134fa669b140f615635baf5a", version = "=0.7.6" }
+sarmg-secret-envelope = { git = "https://github.com/isarmg/sarmg-foundation-server.git", rev = "89eafaf171e409e6134fa669b140f615635baf5a", version = "=0.7.6" }
 uuid = { version = "1", features = ["serde", "v4"] }
 
 [profile.release]

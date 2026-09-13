@@ -79,7 +79,7 @@ def read_identity(binary: Path) -> tuple[dict[str, object], bytes]:
         or identity["application"] != APPLICATION
         or identity["version"] != VERSION
         or identity["api_prefix"] != "/api/v2"
-        or identity["schema_revision"] != 4
+        or identity["schema_revision"] != 5
         or identity["target"] != TARGET
         or not isinstance(identity["schema_sha256"], str)
         or SHA256.fullmatch(identity["schema_sha256"]) is None

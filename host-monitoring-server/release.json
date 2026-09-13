@@ -3,7 +3,7 @@
   "application": "host-monitoring",
   "version": "0.9.10",
   "api_prefix": "/api/v2",
-  "schema_revision": 4,
-  "schema_sha256": "138b1e3d3b2fa329d130a1ac646cf08d23ae69c8edb64f55f54fb070c2645dd0",
+  "schema_revision": 5,
+  "schema_sha256": "84ed9c9ecd7ef2155066f9b2ce7901034f67221a0cee0d2d0dbde248588b4556",
   "target": "x86_64-unknown-linux-gnu"
 }

@@ -7,7 +7,7 @@ Host Monitoring
 ├─ Server
 │  ├─ 验证发行树/配置/当前 Schema
 │  ├─ Foundation admin 用户名登录与 Session/CSRF
-│  ├─ Client 邀请、配对请求与一次性激活
+│  ├─ Client 实例授权码、配对请求与凭据激活
 │  ├─ 报告限流 -> 有界队列 -> 单 SQLite writer
 │  └─ 原始报告 -> 小时聚合 -> 分层保留
 ├─ Desktop Client
@@ -49,12 +49,14 @@ primitive 检查已有 username 与完整 Argon2id 参数。`doctor` 检查 Sche
 
 ```text
 {username,password} -> Foundation username 规范化 + Argon2id 校验 -> SQLite Session + CSRF
-  -> 受保护管理 API 创建 invite 并返回一次性 activation code
+  -> 受保护管理 API 创建实例并返回该实例的长期 authorization code
   -> Client 创建含 token/polling-secret 摘要的 pairing request
   -> code 经 Client 激活端点或管理员激活端点提交
   -> Server 在一个事务中绑定 invite/request/Host/credential
   -> Client 轮询到 active 后原子提交 active-binding.json
 ```
+
+授权码在 Server 以摘要和认证加密密文同时保存，首次绑定不会删除；正常报告使用独立 Client credential。管理员更换授权码会撤销旧 credential、把实例恢复为 pending，Client 必须显式执行 `pair replace`。
 
 来源、设备、请求/邀请和管理员账户分别拥有有界准入预算；TCP peer 是来源事实，默认不信任 forwarded
 address。登录请求恰好是 `{username,password}`。候选 username 必须是 1..64 字节 printable ASCII；

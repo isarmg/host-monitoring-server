@@ -184,6 +184,7 @@ def verify_bound_command_boundary(root: Path, temporary: Path) -> None:
     environment.update(
         {
             "HOST_MONITORING_DATABASE_URL": f"sqlite://{database}",
+            "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=",
             "HOST_MONITORING_STATIC_DIR": os.fspath(other_web),
             "HOST_MONITORING_BIND": "127.0.0.1:0",
             "HOST_MONITORING_DEVELOPMENT": "true",
@@ -242,6 +243,7 @@ def relocated_smoke(extracted: Path, temporary: Path) -> None:
     environment.update(
         {
             "HOST_MONITORING_DATABASE_URL": f"sqlite://{state / 'app.db'}",
+            "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI=",
             "HOST_MONITORING_STATIC_DIR": os.fspath(extracted / "web"),
             "HOST_MONITORING_BIND": f"127.0.0.1:{port}",
             "HOST_MONITORING_DEVELOPMENT": "true",

@@ -1,7 +1,7 @@
 import { checkWebLanguage } from "./language.mjs";
 import { checkHeaderActions, checkHeaderLogout } from "./header-actions.mjs";
 import assert from "node:assert/strict";
-import { chromium, firefox } from "@playwright/test";
+import { chromium, firefox, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { preview } from "vite";
 
@@ -45,7 +45,7 @@ try {
         const header = document.querySelector(".sarmg-page-header");
         const first = document.querySelector("#instances-heading");
         const firstSection = first?.closest("section");
-        const second = [...document.querySelectorAll("h2")].find(node => node.textContent === "已配对主机");
+        const second = [...document.querySelectorAll("h2")].find(node => node.textContent === "实例总览");
         if (!header || !first || !firstSection || !second) throw new Error("Host spacing fixture is incomplete");
         return {
           menuToFirst: first.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
@@ -54,13 +54,8 @@ try {
       });
       assert.ok(Math.abs(spacing.menuToFirst - 16) < 2, JSON.stringify(spacing));
       assert.ok(Math.abs(spacing.sectionToSubheading - 16) < 2, JSON.stringify(spacing));
-      const sidebar = page.getByRole("region", { name: "监控实例" });
-      const selectedStyle = await page.getByRole("banner").getByRole("button", { name: "实例", exact: true }).evaluate(button => {
-        const style = getComputedStyle(button); return { shadow: style.boxShadow, decoration: style.textDecorationLine, background: style.backgroundColor };
-      });
-      assert.deepEqual(selectedStyle, { shadow: "none", decoration: "underline", background: "rgba(0, 0, 0, 0)" });
+      await expect(page.getByRole("button", { name: "实例列表", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
-      assert.deepEqual(await sidebar.getByRole("button").allTextContents(), Array.from({ length: 50 }, (_, index) => `Host-${index}`));
       const table = page.getByRole("table", { name: "监控实例列表" });
       assert.equal(await table.locator("tbody tr").count(), 50);
       assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["实例名称", "状态", "系统 / 架构", "CPU 使用率", "内存使用率", "最近连接", "最近上报"]);
@@ -74,9 +69,9 @@ try {
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
       await page.getByRole("button", { name: "下一页" }).click();
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).waitFor();
-      assert.deepEqual(await sidebar.getByRole("button").allTextContents(), ["Host-50"]);
       assert.equal(await table.locator("tbody tr").count(), 1);
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).click();
+      await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.ok(requested.includes(50));
       await page.getByText("完整采集信息").click();
       assert.equal(await page.getByText("client_version", { exact: true }).count(), 0);
@@ -87,7 +82,7 @@ try {
         assert.deepEqual(result.violations, []);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       }
-      await checkWebLanguage(page, {"routes":[["instances","Instances"],["monitor","Live monitoring"]],"names":["验收主机","测试主机"]});
+      await checkWebLanguage(page, {"routes":[["instances","Instance list"],["details","Details"],["logs","Logs"]],"names":["验收主机","测试主机"]});
       await checkHeaderLogout(page, session.csrf_token);
       assert.deepEqual(errors, []);
       console.log(`${engine.name()}: current Host build, pagination, full details and mobile light/dark WCAG AA passed`);

@@ -71,7 +71,7 @@ host-monitoring/
 
 1. “收到报告”不等于已经持久化；Server 只有事务提交后才返回 `202`。
 2. HTTP 超时不等于服务端未处理；Client 必须依据可重试分类保留原报告 ID。
-3. 配对码不是长期 credential；它只用于一次性授权流程。
+3. 实例授权码长期存在但不是报告 credential；管理员更换它会撤销当前 Client credential，并要求显式重新配对。
 4. 卸载程序默认保留本地状态不表示该状态可被另一发行读取；再次安装前必须验证当前 identity。
 5. 当前 Web 没有图表和 history 视图；页面中的列表 JSON 只反映 Host summary/latest 标量。
 

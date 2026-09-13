@@ -27,12 +27,15 @@ try {
             if (creates === 1) return route.fulfill({ status: 503, headers: { "x-request-id": "invite-123" }, json: { code: "service_unavailable", retryable: true, message: "SECRET", request_id: "invite-123" } });
             await new Promise(done => { release = done; });
             invitation = { request_id: inviteId, instance_id: instanceId, display_name: request.postDataJSON().display_name,
-              status: "pending", created_at: "2026-09-05T00:00:00Z" };
+              status: "pending", created_at: "2026-09-05T00:00:00Z", authorization_code: code };
             return route.fulfill({ status: 201, json: { ...invitation, activation_code: code } });
           }
           return route.fulfill({ json: invitation ? [invitation] : [] });
         }
-        if (path.endsWith(`/client-instances/${inviteId}`)) { invitation.status = "cancelled"; return route.fulfill({ status: 204 }); }
+        if (path.endsWith(`/client-instances/${inviteId}`)) {
+          if (invitation.status === "cancelled") invitation = null; else invitation.status = "cancelled";
+          return route.fulfill({ status: 204 });
+        }
         if (path.endsWith(`/pairing-requests/${pairId}`)) return route.fulfill({ json: {
           request_id: pairId, os: "linux", arch: "x86_64", client_version: "0.8.0", status: activations ? "active" : "waiting", expires_at: "2099-01-01T00:00:00Z",
         } });
@@ -63,20 +66,23 @@ try {
       await page.getByRole("dialog").locator("form").evaluate(form => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
       await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeVisible();
       assert.equal(creates, 2); release();
-      await expect(page.getByLabel("配对码")).toHaveValue(code);
-      await expect(page.getByRole("dialog")).toContainText("不设有效期");
+      await expect(page.getByLabel("授权码")).toHaveValue(code);
+      await expect(page.getByRole("dialog")).toContainText("不会因配对成功而失效");
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
         assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
       }
       assert.equal(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }).includes("uci_")), false);
       await page.getByRole("button", { name: "已保存，关闭" }).click();
-      await expect(page.getByLabel("配对码")).toHaveCount(0);
+      await expect(page.getByLabel("授权码")).toHaveCount(0);
       await page.getByRole("button", { name: "取消配对", exact: true }).click();
       await page.getByRole("button", { name: "确认", exact: true }).click();
       await expect(page.getByRole("cell", { name: "已取消", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "删除实例", exact: true }).click();
+      await page.getByRole("button", { name: "确认", exact: true }).click();
+      await expect(page.getByText("暂无实例", { exact: true })).toBeVisible();
       // A new trusted invitation models the independent Client pairing request.
-      invitation.status = "pending";
+      invitation = { request_id: inviteId, instance_id: instanceId, display_name: "测试 Client", status: "pending", created_at: "2026-09-05T00:00:00Z", authorization_code: code };
       await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/activate/${pairId}`);
       await expect(page.getByRole("dialog", { name: "激活 客户端 配对" })).toBeVisible();
       await expect(page.getByLabel("配对请求标识")).toHaveValue(pairId);
@@ -90,7 +96,7 @@ try {
       assert.ok(!page.url().includes(code));
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual(errors, []);
-      console.log(`${engine.name()}: invite/create/failure/single submit/one-time code/cancel/deep-link/device confirmation/activation passed`);
+      console.log(`${engine.name()}: instance/create/failure/single submit/long-lived code/cancel/deep-link/device confirmation/activation passed`);
     } finally { await browser.close(); }
   }
 } finally { await new Promise(done => server.httpServer.close(done)); }

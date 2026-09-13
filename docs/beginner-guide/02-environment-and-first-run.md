@@ -60,7 +60,7 @@ cargo +1.98.0 run -p host-monitor -- once --config /absolute/config.json
 
 `probe` 只证明采集；`pair` 创建/恢复请求并等待 activation；`status` 读取本地绑定；`once` 才同时覆盖
 采集和主通路投递。当前 React 页面没有 invite/activation 操作，所以不能只打开 activation URL 完成
-配对；开发联调需直接覆盖受保护 invite/activation API，Windows Tray 路径还可把一次性 code 交给 Client
+配对；开发联调需直接覆盖受保护 invite/activation API，Windows Tray 路径还可把实例授权码交给 Client
 提交。不要跳过配对后把 401 当作采集器故障。
 
 ## 2.4 安全地观察状态

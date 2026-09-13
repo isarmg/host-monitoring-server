@@ -142,6 +142,7 @@ CREATE TABLE client_instance_invites (
     invite_id             TEXT PRIMARY KEY,
     instance_id           TEXT NOT NULL,
     activation_code_hash  TEXT NOT NULL UNIQUE,
+    authorization_code_enc BLOB NOT NULL CHECK(length(authorization_code_enc) BETWEEN 64 AND 1024),
     display_name          TEXT NOT NULL,
     status                TEXT NOT NULL DEFAULT 'pending',
     created_at            TEXT NOT NULL,
@@ -160,7 +161,7 @@ CREATE TABLE client_pairing_requests (
     token_hash           TEXT NOT NULL UNIQUE,
     polling_secret_hash  TEXT NOT NULL UNIQUE,
     status               TEXT NOT NULL DEFAULT 'pending',
-    invite_id            TEXT UNIQUE,
+    invite_id            TEXT,
     instance_id          TEXT,
     expires_at           TEXT NOT NULL,
     created_at           TEXT NOT NULL,
@@ -301,6 +302,10 @@ CREATE INDEX client_pairing_requests_expiry
 CREATE INDEX client_pairing_requests_pending_device
     ON client_pairing_requests(requested_host_id, expires_at)
     WHERE status = 'pending';
+
+CREATE INDEX client_pairing_requests_invite
+    ON client_pairing_requests(invite_id)
+    WHERE invite_id IS NOT NULL;
 
 CREATE INDEX audit_events_created ON audit_events(created_at DESC);
 

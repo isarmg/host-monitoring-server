@@ -147,7 +147,8 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
     let path = database_path();
     let pool = open_database(&path).await;
     store::initialize_empty(&pool).await.unwrap();
-    let (result, code) = store::create_invite(&pool, "Cancel me", "admin")
+    let secrets = host_monitoring_server::crypto::SecretBox::new([0x42; 32]);
+    let (result, code) = store::create_invite(&pool, &secrets, "Cancel me", "admin")
         .await
         .unwrap();
     let store::CreateInviteResult::Created(invite) = result else {
@@ -183,9 +184,113 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
             .unwrap();
     assert!(!columns.iter().any(|name| name == "expires_at"));
     assert_eq!(
-        store::list_invites(&pool).await.unwrap()[0].status,
+        store::list_invites(&pool, &secrets).await.unwrap()[0].status,
         "cancelled"
     );
+    pool.close().await;
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn rotating_instance_authorization_revokes_old_credential_and_requires_new_code() {
+    let path = database_path();
+    let pool = open_database(&path).await;
+    store::initialize_empty(&pool).await.unwrap();
+    let secrets = host_monitoring_server::crypto::SecretBox::new([0x42; 32]);
+    let (created, old_code) = store::create_invite(&pool, &secrets, "Rotate me", "admin")
+        .await
+        .unwrap();
+    let store::CreateInviteResult::Created(invite) = created else {
+        panic!("create failed")
+    };
+    let old_code = old_code.unwrap();
+    let encrypted: Vec<u8> = sqlx::query_scalar(
+        "SELECT authorization_code_enc FROM client_instance_invites WHERE invite_id=?",
+    )
+    .bind(Uuid::parse_str(&invite.request_id).unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        !encrypted
+            .windows(old_code.len())
+            .any(|value| value == old_code.as_bytes())
+    );
+
+    let old_token_hash = token_hash("old-client-token");
+    let first = ClientPairingRequest {
+        host: host(Uuid::new_v4(), "linux"),
+        token_hash: old_token_hash.clone(),
+        polling_secret_hash: token_hash("old-polling-token"),
+    };
+    let store::CreatePairingResult::Ready { request_id, .. } =
+        store::create_pairing(&pool, &first).await.unwrap()
+    else {
+        panic!("pairing request failed")
+    };
+    assert!(matches!(
+        store::activate(&pool, request_id, &token_hash(&old_code), "admin")
+            .await
+            .unwrap(),
+        store::ActivateResult::Active(_)
+    ));
+    assert!(
+        store::host_for_token(&pool, &old_token_hash)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    let new_code = format!("uci_{}", Uuid::new_v4().simple());
+    let rotated = store::rotate_invite_authorization(
+        &pool,
+        &secrets,
+        Uuid::parse_str(&invite.request_id).unwrap(),
+        &new_code,
+        "admin",
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(rotated.status, "pending");
+    assert_eq!(rotated.authorization_code, new_code);
+    assert!(
+        store::host_for_token(&pool, &old_token_hash)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let new_token_hash = token_hash("new-client-token");
+    let second = ClientPairingRequest {
+        host: host(Uuid::new_v4(), "linux"),
+        token_hash: new_token_hash.clone(),
+        polling_secret_hash: token_hash("new-polling-token"),
+    };
+    let store::CreatePairingResult::Ready { request_id, .. } =
+        store::create_pairing(&pool, &second).await.unwrap()
+    else {
+        panic!("replacement pairing request failed")
+    };
+    assert!(matches!(
+        store::activate(&pool, request_id, &token_hash(&old_code), "admin")
+            .await
+            .unwrap(),
+        store::ActivateResult::InvalidCode
+    ));
+    assert!(matches!(
+        store::activate(&pool, request_id, &token_hash(&new_code), "admin")
+            .await
+            .unwrap(),
+        store::ActivateResult::Active(_)
+    ));
+    assert!(
+        store::host_for_token(&pool, &new_token_hash)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
     pool.close().await;
     std::fs::remove_file(path).unwrap();
 }
@@ -198,9 +303,11 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         .await
         .expect("initialize current schema");
 
-    let (invite_result, activation_code) = store::create_invite(&pool, "Server One", "admin")
-        .await
-        .expect("create invite");
+    let secrets = host_monitoring_server::crypto::SecretBox::new([0x42; 32]);
+    let (invite_result, activation_code) =
+        store::create_invite(&pool, &secrets, "Server One", "admin")
+            .await
+            .expect("create invite");
     let store::CreateInviteResult::Created(invite) = invite_result else {
         panic!("fresh database unexpectedly rejected an invite");
     };
@@ -211,7 +318,7 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         .await
         .unwrap();
     assert_eq!(
-        store::list_invites(&pool).await.unwrap()[0].status,
+        store::list_invites(&pool, &secrets).await.unwrap()[0].status,
         "pending"
     );
     let instance_id = Uuid::parse_str(&invite.instance_id).expect("canonical instance id");

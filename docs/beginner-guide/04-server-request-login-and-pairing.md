@@ -38,12 +38,13 @@ Web 的恢复/登录/登出、401 清理与内存 Session/CSRF 状态统一由
 
 Client、管理员 API 和 Server 共同完成配对。管理员 API 创建 invite 并只在创建响应返回一次 activation
 code。Client 在本地生成长期 bearer secret 与独立 polling secret，只发送两者的 SHA-256；Server 从不把
-bearer plaintext 发回浏览器。code 与 pairing request 成功激活后，Server 把已提交的 bearer
-摘要绑定到新 Host；Client 轮询 active 并原子写入本地 secret、Host identity 与 active binding。
+bearer plaintext 发回浏览器。实例授权码与 pairing request 成功激活后，Server 把已提交的 bearer
+摘要绑定到 Host；Client 轮询 active 并原子写入本地 secret、Host identity 与 active binding。授权码不会
+因这次激活被消耗；管理员更换授权码时，Server 会撤销旧 bearer 并要求 Client 重新配对。
 
 当前 React 页面只做管理员认证和 Host 列表，不实现 invite/activation UI，也不处理 Client 给出的
 `/activate/{request_id}`。因此“浏览器打开链接即可批准”目前不是已完成能力；真正存在的是受保护管理
-API、持有一次性 code 的客户端可调用的 activation API 和 Windows Tray code 提交通路。公开 activation
+API、持有实例授权码的客户端可调用的 activation API 和 Windows Tray code 提交通路。公开 activation
 端点依靠 code 本身作为 capability，不应把任意调用方描述为已经认证的管理员或设备。
 
 ## 4.4 配对状态机
