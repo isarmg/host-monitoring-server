@@ -44,8 +44,10 @@ React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session
 Foundation 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
 SQLite reopen 与 Router→Client 合同测试；不保留旧版本 fallback。
 
-当前 React 业务页提供主机列表、分页、CPU/内存摘要和可展开的完整采集字段。它不提供邀请/激活、
-历史图表、备注、删除或 audit 查询界面，不能据此宣称已有完整 Web 运维台。
+当前 React 管理台以实例列表和实例详情为主线：列表提供总览、分页、CPU/内存摘要、实例简要信息和
+新建实例；详情提供完整采集字段，并可查看或轮换长期授权码、完成待处理配对、取消待配对实例、修改备注
+以及删除已配对实例。授权码轮换会撤销旧 Client credential，客户端必须重新配对。当前仍没有历史图表和
+audit 查询界面。
 `cd clients/web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 分页、指标详情、移动主题与 WCAG AA 验收；
 首次运行需 `npx playwright install --with-deps chromium firefox`。该测试的 API 全部由本机测试数据拦截，不访问真实 Client。
 
@@ -61,8 +63,7 @@ SQLite reopen 与 Router→Client 合同测试；不保留旧版本 fallback。
 | `DEVELOPMENT` | `false` | 仅本机开发可开启 |
 | `BOOTSTRAP_ADMIN_USERNAME` | `admin` | 仅在空 `_sarmg_administrators` 创建首个管理员；按 Foundation 规则规范化，不是 email，也没有旧变量别名 |
 | `BOOTSTRAP_ADMIN_PASSWORD` | 空 `_sarmg_administrators` 时必填 | 12..1024 字节且无 ASCII control；创建后保存 Foundation 当前 Argon2id hash，不保存明文 |
-| `SESSION_IDLE_TTL_SECONDS` | 1800 | 会话空闲期限；必须大于 0，且不得大于 absolute TTL |
-| `SESSION_ABSOLUTE_TTL_SECONDS` | 43200 | 会话绝对期限；必须大于 0，任何 idle 刷新都不能越过它 |
+| `CLIENT_AUTHORIZATION_KEY` | 必填 | 标准 Base64 编码的 32 个随机字节；生成一次并持久保存，用于加密每实例长期授权码 |
 | `TELEMETRY_QUEUE_CAPACITY` | 256，最大 1024 | 内存报告队列 |
 | `TELEMETRY_BATCH_SIZE` | 64，范围 1..min(512, queue) | 单事务候选报告数 |
 | `TELEMETRY_FLUSH_MILLISECONDS` | 25，范围 1..1000 | 低流量 batch 最长聚合等待 |
@@ -99,17 +100,16 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 |---|---|---|---|
 | `GET /healthz` | 公开 | 空响应体 | 存活 204，不健康 503 |
 | `GET /readyz` | 公开 | 仅最小就绪事实 | `200/503`，精确 `{"ready":bool}`；任务与数据库详情仅在受保护诊断中提供 |
-| `GET /api/v2/platform/diagnostics` | 管理员 Session | 不返回凭据或内部错误 | 当前产品/Schema、checks、tasks、积压与 Request ID；`no-store` |
 | `POST /api/v2/auth/login` | 浏览器公开入口 | 16 KiB；exact `{username,password}`；同源；TCP peer 与规范 username 双重限流 | `200` + exact Session；设置 Cookie；不知道账户时仍做 dummy Argon2；成功响应 `no-store` |
 | `GET /api/v2/auth/session` | 管理员 Session Cookie | 不接受业务正文；不要求 CSRF | 轮换一个 CSRF token 并返回 exact Session；成功响应 `no-store` |
 | `POST /api/v2/auth/logout` | 管理员 Session + CSRF + 同源 | 无业务正文 | 撤销当前 Session、删除其 CSRF 摘要、清除 Cookie；成功响应 `204 no-store` |
-| `GET /api/v2/monitoring/hosts` | 管理员 Session | query 只有 `limit/offset`；服务端钳到 1..1000，默认 200 | 分页 Host summary；当前 React 页只调用这一条业务 API |
-| `GET /api/v2/monitoring/hosts/{host_id}` | 管理员 Session | canonical UUID | Host summary 与可空 latest 原始报告；Web 的「新建实例」调用 |
+| `GET /api/v2/monitoring/hosts` | 管理员 Session | query 只有 `limit/offset`；服务端钳到 1..1000，默认 200 | 分页 Host summary；React 总览与实例/详情入口共同使用 |
+| `GET /api/v2/monitoring/hosts/{host_id}` | 管理员 Session | canonical UUID | Host summary 与可空 latest 原始报告；当前 Web 详情使用列表中的同一投影，端点供独立调用方精确读取 |
 | `GET /api/v2/monitoring/hosts/{host_id}/history` | 管理员 Session | `from/to/limit`；`from <= to`；limit 1..1000，默认 300 | 仍保留的 raw 标量点；不读取 hourly aggregate |
 | `GET/POST /api/v2/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，授权码不设有效期 | 列表最多 200 条并返回可查看的实例授权码；新建 `201`；成功响应 `no-store` |
 | `PUT /api/v2/monitoring/client-instances/{request_id}/authorization` | 管理员 Session + CSRF + 同源 | canonical UUID；exact `authorization_code`，当前 `uci_` 格式 | 更新加密密文/摘要、撤销旧 Client credential，并将实例恢复为 pending；Client 需重新配对 |
-| `DELETE /api/v2/monitoring/client-instances/{request_id}` | 管理员 Session + CSRF + 同源 | canonical UUID，只能取消 pending invite | `204`；不存在为 404，非 pending 为 409 |
-| `POST /api/v2/host-monitor/activate-admin` | 管理员 Session + CSRF + 同源 | 16 KiB 管理上限；exact request ID + activation code | 与 capability 激活进入同一事务；React 尚未调用 |
+| `DELETE /api/v2/monitoring/client-instances/{request_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；pending 首次调用转 cancelled，cancelled 再次调用永久删除 | `204`；不存在为 404，active 为 409；Web 分别显示“取消配对”和“删除实例” |
+| `POST /api/v2/host-monitor/activate-admin` | 管理员 Session + CSRF + 同源 | 16 KiB 管理上限；exact request ID + activation code | 与 capability 激活进入同一事务；React 配对确认流程调用 |
 | `PATCH/DELETE /api/v2/monitoring/managed-instances/{host_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；PATCH remark trim 后 1..255 UTF-8 bytes | `204`；PATCH 是 last-write-wins，无 ETag/revision；DELETE 永久级联删除且没有产品内恢复 |
 | `POST /api/v2/host-monitor/pairing-requests` | 未配对 Client | Client 路由组 512 KiB；strict Host、bearer/polling-secret SHA-256；来源/设备/容量限流 | 创建或幂等恢复 pairing request；返回 activation URL，成功 `no-store` |
 | `GET /api/v2/host-monitor/pairing-requests/{request_id}` | 持有 request ID 的调用方 | canonical UUID；来源/请求限流 | 只暴露 OS/arch/version/status/expiry 公共摘要；成功 `no-store` |

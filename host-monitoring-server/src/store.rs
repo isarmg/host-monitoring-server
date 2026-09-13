@@ -739,11 +739,23 @@ async fn store_report_in_transaction(
         };
     };
     let stored_received: DateTime<Utc> = row.try_get("received_at")?;
+    // Transport liveness is based on the server receipt time of every newly
+    // accepted report. A client's sampling clock may move backwards; that must
+    // not overwrite newer metrics, but it still proves that the client is
+    // communicating successfully.
+    sqlx::query(
+        "UPDATE monitored_hosts SET last_seen_at = CASE WHEN last_seen_at > ? THEN last_seen_at ELSE ? END WHERE host_id = ?",
+    )
+    .bind(stored_received)
+    .bind(stored_received)
+    .bind(host_id)
+    .execute(&mut **tx)
+    .await?;
     if becomes_latest {
         sqlx::query(
             r#"UPDATE monitored_hosts SET
                  os=?,os_version=?,kernel_version=?,arch=?,client_version=?,capabilities=?,
-                 last_seen_at=CASE WHEN last_seen_at > ? THEN last_seen_at ELSE ? END,latest_report_id=?,
+                 latest_report_id=?,
                  latest_collected_at=?,latest_interval_seconds=? WHERE host_id=?"#,
         )
         .bind(report.host.os.trim())
@@ -752,8 +764,6 @@ async fn store_report_in_transaction(
         .bind(report.host.arch.trim())
         .bind(report.host.client_version.trim())
         .bind(Json(&report.capabilities))
-        .bind(stored_received)
-        .bind(stored_received)
         .bind(report_id)
         .bind(report.collected_at)
         .bind(report.interval_seconds)

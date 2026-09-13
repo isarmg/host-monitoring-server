@@ -72,6 +72,13 @@ class ReleaseToolingTests(unittest.TestCase):
         self.assertIn("bin/host-monitoring-server", text)
         self.assertIn("systemd/host-monitoring-server.service", text)
         self.assertIn("RELEASE-MANIFEST.json", text)
+        self.assertIn("| `schema_revision` | `5` |", text)
+        self.assertIn(
+            "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY=REPLACE_WITH_BASE64_ENCODED_32_RANDOM_BYTES",
+            text,
+        )
+        self.assertNotIn("HOST_MONITORING_SESSION_IDLE_TTL_SECONDS", text)
+        self.assertNotIn("HOST_MONITORING_SESSION_ABSOLUTE_TTL_SECONDS", text)
         source_only = re.compile(r"(?:^|[`\s])(scripts|clients|config|deploy)/")
         self.assertIsNone(
             source_only.search(text),

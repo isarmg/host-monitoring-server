@@ -101,7 +101,7 @@ tar --extract --gzip \
 | `application` | `host-monitoring` |
 | `version` | `0.9.11` |
 | `api_prefix` | `/api/v2` |
-| `schema_revision` | `1` |
+| `schema_revision` | `5` |
 | `schema_sha256` | 64 位小写十六进制当前 Schema 摘要 |
 | `target` | `x86_64-unknown-linux-gnu` |
 | `source_revision` | 40 位小写十六进制 Git revision，不能是 `unbound` |
@@ -189,9 +189,7 @@ HOST_MONITORING_DEVELOPMENT=false
 
 HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME=admin
 HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD=REPLACE_WITH_A_UNIQUE_PASSWORD_OF_AT_LEAST_12_BYTES
-
-HOST_MONITORING_SESSION_IDLE_TTL_SECONDS=1800
-HOST_MONITORING_SESSION_ABSOLUTE_TTL_SECONDS=43200
+HOST_MONITORING_CLIENT_AUTHORIZATION_KEY=REPLACE_WITH_BASE64_ENCODED_32_RANDOM_BYTES
 
 HOST_MONITORING_TELEMETRY_QUEUE_CAPACITY=256
 HOST_MONITORING_TELEMETRY_BATCH_SIZE=64
@@ -222,8 +220,7 @@ unit 会把 `HOST_MONITORING_STATIC_DIR` 固定为
 | `DEVELOPMENT` | 生产 `false`；`true` 只允许 loopback bind |
 | `BOOTSTRAP_ADMIN_USERNAME` | 默认 `admin`；必须是当前 canonical username |
 | `BOOTSTRAP_ADMIN_PASSWORD` | 空库时必填，12..1024 bytes、无 ASCII control |
-| `SESSION_IDLE_TTL_SECONDS` | 正整数，默认 1800，不得大于 absolute |
-| `SESSION_ABSOLUTE_TTL_SECONDS` | 正整数，默认 43200 |
+| `CLIENT_AUTHORIZATION_KEY` | 必填；标准 Base64 编码的 32 个随机字节；用于加密每实例长期授权码 |
 | `TELEMETRY_QUEUE_CAPACITY` | 默认 256，最大 1024 |
 | `TELEMETRY_BATCH_SIZE` | 默认 64，1..min(512, queue) |
 | `TELEMETRY_FLUSH_MILLISECONDS` | 默认 25，1..1000 |
@@ -255,6 +252,10 @@ Server 与 React 管理 Web 只保留 `admin` role；不存在 viewer、operator
 
 首次成功启动并创建管理员后，从长期配置删除 `HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD` 明文。已有
 管理员时启动不会覆盖账户，而会验证 username 与当前 Argon2id hash；坏行会阻止服务。
+
+`HOST_MONITORING_CLIENT_AUTHORIZATION_KEY` 应在首次部署时生成一次并持久保存到独立秘密系统，例如
+`openssl rand -base64 32`。它不是实例授权码；更换或遗失该密钥会使数据库中已加密的授权码无法读取，
+不能作为日常轮换实例授权码的方式。
 
 ## 8. 安装 systemd unit
 
@@ -329,16 +330,17 @@ Server 不终止 TLS。代理负责证书、私钥、续期、HSTS 和公网限�
 
 | 路径 | 身份 | 用途 |
 |---|---|---|
-| `GET /health/live` | 公开 | 进程存活 |
-| `GET /health/ready` | 公开 | 数据库、retention、writer readiness |
+| `GET /healthz` | 公开 | 进程存活，成功 204 |
+| `GET /readyz` | 公开 | 最小就绪状态，成功体精确为 `{"ready":true}` |
 | `POST /api/v2/auth/login` | 公开入口 + 同源/限流 | 管理员登录 |
 | `GET /api/v2/auth/session` | 管理员 Cookie | Session 恢复并轮换 CSRF |
 | `POST /api/v2/auth/logout` | 管理员 Cookie + CSRF | 撤销当前 Session |
 | `/api/v2/monitoring/*` | 管理员 Cookie；写操作另需 CSRF | Host、历史、邀请、备注与删除 |
 | `/api/v2/host-monitor/*` | pairing capability 或 Client Bearer | 配对、激活与遥测 |
 
-当前 React 页面只覆盖登录、Session 恢复、退出和 Host 列表 JSON。后端有详情、历史、邀请、激活、备注
-和删除能力，不表示 Web 已实现完整操作台。
+当前 React 页面覆盖登录、Session 恢复、退出、实例创建、长期授权码查看/轮换、取消配对、已取消实例删除、
+激活确认、Host 列表与详情、历史、备注和受控删除。页面显示“已保存”只证明管理写入提交；Client 重新配对、
+新报告到达等业务结果仍须在实例状态和 Host `last_seen` 中单独确认。
 
 ## 12. 日常运维
 

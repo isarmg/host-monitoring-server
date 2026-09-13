@@ -390,13 +390,29 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
     assert_eq!(summary.metrics.cpu_usage_percent, Some(42.5));
     assert_eq!(latest, Some(report.clone()));
 
+    let clock_rollback = self::report(instance_id, collected_at - Duration::minutes(10));
+    let rollback_metrics = model::validate_report(&clock_rollback).unwrap();
+    let (_, rollback_received_at) = store::store_report(
+        &pool,
+        &clock_rollback,
+        &client_token_hash,
+        &rollback_metrics,
+    )
+    .await
+    .expect("accept report after the client clock moves backwards");
+    let (after_rollback, latest_after_rollback) =
+        store::get_host(&pool, instance_id).await.unwrap().unwrap();
+    assert_eq!(after_rollback.last_seen_at, rollback_received_at);
+    assert_eq!(after_rollback.latest_collected_at, Some(collected_at));
+    assert_eq!(latest_after_rollback, Some(report.clone()));
+
     let credential_last_used: Option<DateTime<Utc>> =
         sqlx::query_scalar("SELECT last_used_at FROM client_credentials WHERE token_hash=?")
             .bind(&client_token_hash)
             .fetch_one(&pool)
             .await
             .expect("read credential timestamp");
-    assert_eq!(credential_last_used, Some(received_at));
+    assert_eq!(credential_last_used, Some(rollback_received_at));
 
     let history = store::history(
         &pool,
