@@ -57,7 +57,7 @@ try {
       await expect(page.getByRole("button", { name: "实例列表", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
       const table = page.getByRole("table", { name: "监控实例列表" });
-      assert.equal(await table.locator("tbody tr").count(), 50);
+      await expect(table.locator("tbody tr")).toHaveCount(50);
       assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["实例名称", "状态", "系统 / 架构", "CPU 使用率", "内存使用率", "最近连接", "最近上报"]);
       const cells = table.locator("tbody tr").first().locator("td");
       assert.deepEqual((await cells.allTextContents()).slice(0, 4), ["在线", "linux / x86_64", "未上报", "25.0%"]);
@@ -69,7 +69,7 @@ try {
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
       await page.getByRole("button", { name: "下一页" }).click();
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).waitFor();
-      assert.equal(await table.locator("tbody tr").count(), 1);
+      await expect(table.locator("tbody tr")).toHaveCount(1);
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).click();
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.ok(requested.includes(50));
