@@ -11,9 +11,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("{0}")]
     BadRequest(String),
-    #[error(
-        "unsupported host pairing protocol version {received}; supported version is {supported}"
-    )]
+    #[error("Client pairing protocol is unsupported")]
     UnsupportedClientProtocol { received: u16, supported: u16 },
     #[error("unauthorized")]
     Unauthorized,
