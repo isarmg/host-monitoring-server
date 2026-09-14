@@ -239,7 +239,7 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
             json!({
                 "code": "unsupported_client_protocol",
-                "message": "unsupported host pairing protocol version 2; supported version is 1",
+                "message": "Client pairing protocol is unsupported",
                 "retryable": false,
                 "details": {"received": 2, "supported": [1]}
             })
