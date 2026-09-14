@@ -26,7 +26,7 @@ export function HostDetails({ host, changed }: { host: Host; changed(): void }) 
     event.preventDefault(); const data = new FormData(event.currentTarget);
     void mutate("PATCH", JSON.stringify({ remark: String(data.get("remark")).trim() }));
   }
-  return <div className="sarmg-instance-detail">
+  return <div className="sarmg-content-stack">
     <section className="sarmg-content-panel"><h2>{host.name}</h2><dl>
       <dt>{t("状态", "Status")}</dt><dd>{displayLabel(host.status)}</dd><dt>{t("系统", "System")}</dt><dd>{host.os} / {host.arch}</dd>
       <dt>CPU</dt><dd>{host.cpu_usage_percent === null ? t("不可用", "Unavailable") : `${host.cpu_usage_percent.toFixed(1)}%`}</dd>

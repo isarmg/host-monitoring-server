@@ -61,7 +61,7 @@ maintenance 用时目前不能由产品端点完整观测。它们是应补的�
 adapter/edge。Server 不执行 `ALTER TABLE`，不接受 metadata-free 库，也不会因通用升级引擎存在而自动
 获得转换能力。
 
-当前四元身份是 `host-monitoring` / `0.8.0` / schema revision `1` /
+当前四元身份是 `host-monitoring` / `0.8.1` / schema revision `1` /
 `12dd1e61426b6b99df3d429b8c36ee3a5b22d1da776d98fc960b45b4f58c8e05`。管理员列为
 `auth_users.username`；DDL CHECK/UNIQUE 与启动时 Foundation canonical username/current Argon2id 加载
 检查是两层不同防线。`doctor` 只覆盖 Schema、integrity、foreign key 和 retention 结构，不应被当作账户

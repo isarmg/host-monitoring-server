@@ -13,7 +13,7 @@
 `build.rs` 失败，发行脚本和进程启动还会分别复核构建宿主、target 与运行内核/机器架构。Windows
 `x86_64-pc-windows-msvc` Client 仍是受支持目标。
 
-项目依赖 `sarmg-foundation-server 0.7.11` 的严格登录/Session/ErrorEnvelope 合同、管理员用户名规范化、当前
+项目依赖 `sarmg-foundation-server 0.8.1` 的严格登录/Session/ErrorEnvelope 合同、管理员用户名规范化、当前
 Argon2id/Token/same-origin 原语、React Session 状态机、React/Vite 构建基线、SQLite 连接基线和 Schema
 identity 算法。Host Monitoring 仍独立拥有账户记录、登录准入、Session/CSRF 持久生命周期、Cookie、
 产品页面/响应 guard、产品 DDL、文件安全、数据库初始化/锁、Client 配对与投递状态机。管理角色只有
@@ -24,7 +24,7 @@ identity 算法。Host Monitoring 仍独立拥有账户记录、登录准入、S
 按 Foundation 规则 trim ASCII whitespace、转 ASCII 小写后，只接受 3..64 字节、首尾为字母或数字、
 字符仅为 `[a-z0-9._-]` 的 canonical username，并明确禁止 `@`。仓库不保留 email 字段或别名。
 
-产品只接受当前 `0.9.13` 配置、协议、SQLite Schema 和发行身份。服务端与 Client 不解释任何非当前
+产品只接受当前 `0.9.14` 配置、协议、SQLite Schema 和发行身份。服务端与 Client 不解释任何非当前
 状态或路由，也不执行迁移、备份或恢复；这些能力只有在 `sarmg-upgrade` 建立明确转换边后才成立。
 
 ## 仓库组成

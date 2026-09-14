@@ -37,7 +37,7 @@ try {
           return route.fulfill({ status: 204 });
         }
         if (path.endsWith(`/pairing-requests/${pairId}`)) return route.fulfill({ json: {
-          request_id: pairId, os: "linux", arch: "x86_64", client_version: "0.8.0", status: activations ? "active" : "waiting", expires_at: "2099-01-01T00:00:00Z",
+          request_id: pairId, os: "linux", arch: "x86_64", client_version: "0.8.1", status: activations ? "active" : "waiting", expires_at: "2099-01-01T00:00:00Z",
         } });
         if (path.endsWith("/activate-admin")) {
           assert.deepEqual(request.postDataJSON(), { request_id: pairId, activation_code: code });

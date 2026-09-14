@@ -43,7 +43,7 @@
 | HOST-032 | CI Rust/Web/protocol/supply-chain 门禁 | `.github/workflows/ci.yml` | 开发运维 | 中 | 跨组件合同漂移无法提前发现 | clean checkout 全门禁 |
 | HOST-033 | 中文学习、流程、功能和运维文档 | README、`docs/` | 开发运维 | 低 | 开发者难以理解跨平台边界 | 链接和命令抽查 |
 | HOST-034 | 明确不做远程执行、配置下发和多版本 Client 协商 | 不存在对应 route/command | 核心 | 高 | 新增会把只读遥测 Client 变成远控系统并扩大威胁面 | 独立威胁模型与协议设计 |
-| HOST-035 | Server 共享原语固定 Foundation `=0.7.11` + 完整 revision `8f2a5c888bc5f543186ad58bc5b3cee4dc5b2602`；八个 Web 包固定同版 Release URL + lock integrity；Client 使用独立上游 | 根 `Cargo.toml`、`clients/web/{package.json,package-lock.json}`、Foundation 门禁 | 保障 | 高 | 认证、构建及 SQLite 基线漂移；sibling/path 会破坏独立 checkout | Foundation 合同、完整 rev/八个 URL/integrity、Router→Client、Web clean build、SQLite reopen |
+| HOST-035 | Server 共享原语固定 Foundation `=0.8.1` + 完整 revision `85348eb99cbea7798a2a3f8ea55baf0179708322`；八个 Web 包固定同版 Release URL + lock integrity；Client 使用独立上游 | 根 `Cargo.toml`、`clients/web/{package.json,package-lock.json}`、Foundation 门禁 | 保障 | 高 | 认证、构建及 SQLite 基线漂移；sibling/path 会破坏独立 checkout | Foundation 合同、完整 rev/八个 URL/integrity、Router→Client、Web clean build、SQLite reopen |
 | HOST-036 | Server 仅 x86_64 GNU/Linux 的三层平台门禁 | `build.rs`、启动 `uname`、release script/CI | 保障 | 中 | 意外产生或运行未支持的 ARM/musl/Windows/macOS Server | 非目标编译拒绝、打包宿主拒绝、运行身份检查 |
 | HOST-037 | 管理 role 只有 `admin`；数据库不存 role 列，`admin` 只是默认 username | `sarmg-contracts::AdministratorRole/AdministratorSession`、`schema.sql::auth_users` | 核心 | 中 | 加回角色会扩大授权矩阵并使各产品管理语义重新分叉；把默认 username 当唯一 identity 会错误拒绝合法管理员名 | schema 列检查、响应 exact-shape、非 `admin` role 拒绝、其他 canonical username 正例 |
 | HOST-038 | 管理员 username 使用 Foundation 唯一 current 规范化：candidate 1..64 printable ASCII，trim ASCII + lowercase 后 canonical 3..64、首尾字母数字、字符 `[a-z0-9._-]`、禁止 `@` | `sarmg-admin-auth::{normalize_administrator_username,require_canonical_administrator_username}`、`store::normalize_username`、`auth_users.username` | 保障 | 中 | 大小写/空白别名会拆分限流和唯一约束；放入 email 语义会重新引入跨产品身份分叉 | ` Admin `→`admin`，内部空格/`@`/非 ASCII/首尾分隔符/过短过长拒绝，相邻分隔符允许，启动存量扫描 |
@@ -176,7 +176,7 @@
 
 ## 4. 当前版本与明确不做
 
-- 只接受 `0.8.0` 配置、状态与数据库；不包含转换器或平行 alias。
+- 只接受 `0.8.1` 配置、状态与数据库；不包含转换器或平行 alias。
 - 服务端只初始化不存在的当前库，拒绝 metadata-free、非当前 identity 和 Schema drift。
 - 产品不包含 migration、backup、restore；`sarmg-upgrade` 当前也没有 Host 转换边，所以这些操作暂不受支持。
 - Client 不执行远程 Shell、配置修改、补丁管理或自动修复。

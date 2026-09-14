@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.13/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.14/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.13/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.13
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.14/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.14
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.13/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.13` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.14` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -36,7 +36,7 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 Foundation 0.7.11 / `8f2a5c888bc5f543186ad58bc5b3cee4dc5b2602`，八个 Web 包使用
+当前 Server Rust 固定 Foundation 0.8.1 / `85348eb99cbea7798a2a3f8ea55baf0179708322`，八个 Web 包使用
 同版正式 Release tarball 与 SHA-512 integrity，无相邻 Foundation 路径依赖；独立 CI 已通过，
 见[消费者矩阵](https://github.com/isarmg/sarmg-foundation-server/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护，诊断管理功能已移除。
@@ -148,7 +148,7 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.13
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.14
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 host-monitoring-server admin-reset-password --database-url sqlite:///path/app.db \
@@ -206,7 +206,7 @@ WiX 4 MSI 同时安装 Windows Service、Tray 和维护 helper。Tray 是用户�
 主体；两者通过受保护本机控制通道通信。构建/验收使用：
 
 ```powershell
-clients\host-monitor\packaging\windows\wix\build-msi.cmd 0.9.13 `
+clients\host-monitor\packaging\windows\wix\build-msi.cmd 0.9.14 `
   target\x86_64-pc-windows-msvc\release\host-monitor.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-tray.exe
@@ -248,7 +248,7 @@ notarization/stapling，并保存签名者、时间戳、摘要和验证结果�
 
 ## 9. 数据库身份与当前不支持的数据操作
 
-Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、version `0.9.13`、
+Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、version `0.9.14`、
 schema revision `3` 与 SHA-256
 `233c8b12e9b09bc8a4f3dfa57309e5bc268de0aa958e8e0eb45555d75f94c410`；现场 `sqlite_schema` 重新计算也
 必须一致。当前 DDL 中管理员列是 `_sarmg_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical

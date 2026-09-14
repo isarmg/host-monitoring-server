@@ -9,7 +9,7 @@ const session = { authenticated: true, user_id: "A".repeat(43), username: "admin
 function host(index) {
   return {
     id: "018f1f4b-7a5d-7b5f-8d31-" + String(index).padStart(12, "0"), name: "Host-" + index,
-    os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.0",
+    os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1",
     registered_at: "2026-09-04T00:00:00Z", last_seen_at: "2026-09-04T00:00:00Z", latest_collected_at: null,
     status: "online", capabilities: [], cpu_usage_percent: null, memory_usage_percent: 25,
     network_received_bytes_per_second: null, network_transmitted_bytes_per_second: null,
