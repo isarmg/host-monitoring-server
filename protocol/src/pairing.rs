@@ -2,7 +2,8 @@
 //!
 //! These DTOs intentionally contain no trust-boundary validation beyond strict JSON shape and
 //! canonical UUID decoding. The Server still owns policy checks such as hash format, supported
-//! Client version, activation-code limits, and pairing state transitions.
+//! activation-code limits, and pairing state transitions. Release versions are
+//! diagnostics only; wire compatibility is negotiated explicitly below.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -13,6 +14,7 @@ use crate::{HostIdentity, report::deserialize_canonical_uuid};
 /// There are deliberately no aliases for the former module-prefixed routes.
 pub const API_PREFIX: &str = "/api/v2";
 pub const CLIENT_REPORT_PATH: &str = "/api/v2/host-monitor/report";
+pub const CLIENT_CREDENTIAL_STATUS_PATH: &str = "/api/v2/host-monitor/credential-status";
 pub const CLIENT_PAIRING_REQUESTS_PATH: &str = "/api/v2/host-monitor/pairing-requests";
 pub const CLIENT_PAIRING_REQUEST_PATH: &str = "/api/v2/host-monitor/pairing-requests/{request_id}";
 pub const CLIENT_PAIRING_STATUS_PATH: &str =
@@ -21,12 +23,51 @@ pub const CLIENT_ACTIVATE_PATH: &str = "/api/v2/host-monitor/activate";
 pub const CLIENT_ADMIN_ACTIVATE_PATH: &str = "/api/v2/host-monitor/activate-admin";
 pub const BROWSER_ACTIVATION_PATH_PREFIX: &str = "/activate/";
 
+/// Pairing wire contract implemented by this release.
+///
+/// A missing field decodes as version 1 so a Server can be rolled out before
+/// all existing Clients have started sending the explicit discriminator.
+pub const HOST_PAIRING_PROTOCOL_VERSION: u16 = 1;
+
+const fn default_host_pairing_protocol_version() -> u16 {
+    HOST_PAIRING_PROTOCOL_VERSION
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientPairingMode {
+    #[default]
+    Fresh,
+    RecoverIdentity,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClientPairingRequest {
+    #[serde(default = "default_host_pairing_protocol_version")]
+    pub protocol_version: u16,
+    #[serde(default)]
+    pub mode: ClientPairingMode,
     pub host: HostIdentity,
     pub token_hash: String,
     pub polling_secret_hash: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialStatus {
+    Authorized,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialStatusResponse {
+    pub status: CredentialStatus,
+    #[serde(deserialize_with = "deserialize_canonical_uuid")]
+    pub host_id: String,
+    #[serde(deserialize_with = "deserialize_canonical_uuid")]
+    pub instance_id: String,
+    pub protocol_version: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,6 +198,8 @@ mod tests {
     #[test]
     fn pairing_request_round_trips_without_loss() {
         let request = ClientPairingRequest {
+            protocol_version: HOST_PAIRING_PROTOCOL_VERSION,
+            mode: ClientPairingMode::Fresh,
             host: host(),
             token_hash: "a".repeat(64),
             polling_secret_hash: "b".repeat(64),
@@ -165,6 +208,32 @@ mod tests {
         assert_eq!(
             serde_json::from_slice::<ClientPairingRequest>(&encoded).unwrap(),
             request
+        );
+    }
+
+    #[test]
+    fn legacy_pairing_request_defaults_to_protocol_one() {
+        let request: ClientPairingRequest = serde_json::from_value(serde_json::json!({
+            "host": host(),
+            "token_hash": "a".repeat(64),
+            "polling_secret_hash": "b".repeat(64)
+        }))
+        .unwrap();
+        assert_eq!(request.protocol_version, HOST_PAIRING_PROTOCOL_VERSION);
+        assert_eq!(request.mode, ClientPairingMode::Fresh);
+    }
+
+    #[test]
+    fn compatibility_manifest_matches_wire_constants() {
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("../../compatibility.json")).unwrap();
+        assert_eq!(
+            manifest["host_pairing_protocol"],
+            HOST_PAIRING_PROTOCOL_VERSION
+        );
+        assert_eq!(
+            manifest["host_report_schema"],
+            crate::CLIENT_REPORT_SCHEMA_VERSION
         );
     }
 

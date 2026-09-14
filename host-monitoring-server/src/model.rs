@@ -13,7 +13,7 @@ use host_protocol::{
     CLIENT_REPORT_MAX_TEMPERATURE_ID_BYTES, CLIENT_REPORT_MAX_TEMPERATURE_LABEL_BYTES,
     CLIENT_REPORT_MAX_TEMPERATURE_SOURCE_BYTES, CLIENT_REPORT_MAX_TEMPERATURES,
     CLIENT_REPORT_MIN_INTERVAL_SECONDS, CLIENT_REPORT_SCHEMA_VERSION, Capability,
-    ClientPairingRequest, ClientReport, HostIdentity,
+    ClientPairingRequest, ClientReport, HOST_PAIRING_PROTOCOL_VERSION, HostIdentity,
 };
 use serde::{Deserialize, Serialize};
 
@@ -239,6 +239,12 @@ pub struct HistoryQuery {
 }
 
 pub fn validate_pairing(request: &ClientPairingRequest) -> Result<()> {
+    if request.protocol_version != HOST_PAIRING_PROTOCOL_VERSION {
+        return Err(Error::UnsupportedClientProtocol {
+            received: request.protocol_version,
+            supported: HOST_PAIRING_PROTOCOL_VERSION,
+        });
+    }
     validate_host(&request.host)?;
     validate_hash("token_hash", &request.token_hash)?;
     validate_hash("polling_secret_hash", &request.polling_secret_hash)?;
@@ -427,6 +433,15 @@ pub fn validate_host(host: &HostIdentity) -> Result<()> {
         &host.client_version,
         CLIENT_REPORT_MAX_CLIENT_VERSION_BYTES,
     )?;
+    if !host
+        .client_version
+        .bytes()
+        .all(|byte| byte == b' ' || byte.is_ascii_graphic())
+    {
+        return Err(Error::BadRequest(
+            "host.client_version must contain printable ASCII".into(),
+        ));
+    }
     validate_optional(
         "host.os_version",
         host.os_version.as_deref().unwrap_or(""),
@@ -437,26 +452,6 @@ pub fn validate_host(host: &HostIdentity) -> Result<()> {
         host.kernel_version.as_deref().unwrap_or(""),
         CLIENT_REPORT_MAX_HOST_VERSION_BYTES,
     )?;
-    // Release numbers are independent of the validated wire schema. Keep the
-    // shipped 0.9.x clients usable while deploying server and client separately.
-    if !matches!(
-        host.client_version.as_str(),
-        "0.9.3"
-            | "0.9.4"
-            | "0.9.5"
-            | "0.9.6"
-            | "0.9.7"
-            | "0.9.8"
-            | "0.9.9"
-            | "0.9.10"
-            | "0.9.11"
-            | "0.9.12"
-            | "0.9.13"
-            | "0.9.14"
-    ) {
-        return Err(Error::BadRequest("unsupported host.client_version".into()));
-    }
-
     Ok(())
 }
 
@@ -591,20 +586,44 @@ pub fn host_status(last_seen: DateTime<Utc>, interval: Option<f64>) -> String {
 mod client_release_tests {
     use super::*;
     #[test]
-    fn validates_supported_client_releases_independently_of_server_release() {
+    fn client_release_is_diagnostic_and_not_a_compatibility_gate() {
         let mut host: HostIdentity = serde_json::from_value(serde_json::json!({
             "id": "018f1f4b-7a5d-7b5f-8d31-123456789abc", "os": "windows",
             "arch": "x86_64", "client_version": "0.9.7"
         }))
         .unwrap();
-        for version in [
-            "0.9.3", "0.9.4", "0.9.5", "0.9.6", "0.9.7", "0.9.8", "0.9.9", "0.9.10", "0.9.12",
-            "0.9.12", "0.9.13", "0.9.14",
-        ] {
+        for version in ["0.9.3", "0.9.15", "0.9.999", "development-build"] {
             host.client_version = version.into();
             assert!(validate_host(&host).is_ok());
         }
-        host.client_version = "0.1.0".into();
+        host.client_version = "\n".into();
         assert!(validate_host(&host).is_err());
+        host.client_version = "版本一".into();
+        assert!(validate_host(&host).is_err());
+    }
+
+    #[test]
+    fn pairing_compatibility_uses_protocol_not_release_version() {
+        let host: HostIdentity = serde_json::from_value(serde_json::json!({
+            "id": "018f1f4b-7a5d-7b5f-8d31-123456789abc", "os": "windows",
+            "arch": "x86_64", "client_version": "0.9.999"
+        }))
+        .unwrap();
+        let mut request = ClientPairingRequest {
+            protocol_version: HOST_PAIRING_PROTOCOL_VERSION,
+            mode: host_protocol::ClientPairingMode::Fresh,
+            host,
+            token_hash: "a".repeat(64),
+            polling_secret_hash: "b".repeat(64),
+        };
+        assert!(validate_pairing(&request).is_ok());
+        request.protocol_version = 2;
+        assert!(matches!(
+            validate_pairing(&request),
+            Err(Error::UnsupportedClientProtocol {
+                received: 2,
+                supported: 1
+            })
+        ));
     }
 }

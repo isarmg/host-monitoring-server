@@ -15,7 +15,7 @@ from typing import NoReturn
 
 
 APPLICATION = "host-monitoring"
-VERSION = "0.9.12"
+VERSION = "0.9.13"
 TARGET = "x86_64-unknown-linux-gnu"
 CONTRACT_FORMAT = "host-monitoring-release-v1"
 MANIFEST_FORMAT = "host-monitoring-files-v1"
@@ -79,7 +79,7 @@ def read_identity(binary: Path) -> tuple[dict[str, object], bytes]:
         or identity["application"] != APPLICATION
         or identity["version"] != VERSION
         or identity["api_prefix"] != "/api/v2"
-        or identity["schema_revision"] != 5
+        or identity["schema_revision"] != 6
         or identity["target"] != TARGET
         or not isinstance(identity["schema_sha256"], str)
         or SHA256.fullmatch(identity["schema_sha256"]) is None
@@ -92,10 +92,10 @@ def read_identity(binary: Path) -> tuple[dict[str, object], bytes]:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        fail("usage: write-server-release-manifest.py /absolute/releases/0.9.12")
+        fail("usage: write-server-release-manifest.py /absolute/releases/0.9.13")
     root = Path(sys.argv[1])
     if not root.is_absolute() or root.name != VERSION or root.parent.name != "releases":
-        fail("root must be an absolute releases/0.9.12 directory")
+        fail("root must be an absolute releases/0.9.13 directory")
     if root.resolve(strict=True) != root:
         fail("release root must not traverse symbolic links")
     root_stat = root.lstat()

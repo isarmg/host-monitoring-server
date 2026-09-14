@@ -230,3 +230,78 @@ async fn framework_api_rejections_are_replaced_by_the_same_strict_envelope() {
     assert_eq!(envelope.code.as_str(), "method_not_allowed");
     assert!(!envelope.retryable);
 }
+
+#[tokio::test]
+async fn credential_status_requires_a_current_token_and_returns_the_bound_identity() {
+    let fixture = fixture().await;
+    let host_id = Uuid::new_v4();
+    let token = "credential-status-current-token-0123456789";
+    let now = Utc::now();
+    sqlx::query(
+        "INSERT INTO monitored_hosts(\
+           host_id,name,os,arch,client_version,registered_at,last_seen_at\
+         ) VALUES(?,?,?,?,?,?,?)",
+    )
+    .bind(host_id)
+    .bind("Credential status")
+    .bind("linux")
+    .bind("x86_64")
+    .bind("0.9.999")
+    .bind(now)
+    .bind(now)
+    .execute(&fixture.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO client_credentials(credential_id,host_id,token_hash,issued_at) VALUES(?,?,?,?)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(host_id)
+    .bind(token_hash(token))
+    .bind(now)
+    .execute(&fixture.pool)
+    .await
+    .unwrap();
+
+    let accepted = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::get(host_protocol::CLIENT_CREDENTIAL_STATUS_PATH)
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::OK);
+    assert_eq!(accepted.headers()[header::CACHE_CONTROL], "no-store");
+    let body = accepted.into_body().collect().await.unwrap().to_bytes();
+    let status: host_protocol::CredentialStatusResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(status.status, host_protocol::CredentialStatus::Authorized);
+    assert_eq!(status.host_id, host_id.to_string());
+    assert_eq!(status.instance_id, host_id.to_string());
+    assert_eq!(
+        status.protocol_version,
+        host_protocol::HOST_PAIRING_PROTOCOL_VERSION
+    );
+
+    let rejected = fixture
+        .app
+        .clone()
+        .oneshot(
+            Request::get(host_protocol::CLIENT_CREDENTIAL_STATUS_PATH)
+                .header(
+                    header::AUTHORIZATION,
+                    "Bearer unknown-credential-status-token-0123456789",
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    let envelope: ErrorEnvelope =
+        serde_json::from_slice(&rejected.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(envelope.code.as_str(), "unauthorized");
+}

@@ -17,6 +17,16 @@ function host(index) {
     max_temperature_celsius: null, gpu_utilization_percent: null, gpu_memory_usage_percent: null,
   };
 }
+function instance(index) {
+  return {
+    request_id: "028f1f4b-7a5d-7b5f-8d31-" + String(index).padStart(12, "0"),
+    instance_id: host(index).id,
+    display_name: "Host-" + index,
+    status: "active",
+    created_at: "2026-09-04T00:00:00Z",
+    authorization_code: "uci_" + String(index).padStart(32, "0"),
+  };
+}
 const server = await preview({ preview: { host: "127.0.0.1", port: 0, strictPort: true } });
 const address = server.httpServer.address();
 assert.ok(address && typeof address === "object");
@@ -35,17 +45,18 @@ try {
         const isHosts = url.pathname.endsWith("/monitoring/hosts");
         if (isHosts) requested.push(offset);
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(isHosts
-          ? { hosts: offset === 0 ? Array.from({ length: 50 }, (_, index) => host(index)) : [host(50)], total: 51, limit: 50, offset }
-          : url.pathname.endsWith("/client-instances") ? [] : session) });
+          ? { hosts: Array.from({ length: 51 }, (_, index) => host(index)), total: 51, limit: 1000, offset }
+          : url.pathname.endsWith("/client-instances") ? Array.from({ length: 51 }, (_, index) => instance(index)) : session) });
       });
       await page.goto(`http://127.0.0.1:${address.port}`);
       await page.getByRole("button", { name: "选择实例 Host-0", exact: true }).waitFor();
       await checkHeaderActions(page, "/monitoring/hosts");
+      await page.locator("#statistics-heading").waitFor();
       const spacing = await page.evaluate(() => {
         const header = document.querySelector(".sarmg-page-header");
-        const first = document.querySelector("#instances-heading");
+        const first = document.querySelector("#statistics-heading");
         const firstSection = first?.closest("section");
-        const second = [...document.querySelectorAll("h2")].find(node => node.textContent === "实例总览");
+        const second = document.querySelector("#instances-heading");
         if (!header || !first || !firstSection || !second) throw new Error("Host spacing fixture is incomplete");
         return {
           menuToFirst: first.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
@@ -56,23 +67,19 @@ try {
       assert.ok(Math.abs(spacing.sectionToSubheading - 16) < 2, JSON.stringify(spacing));
       await expect(page.getByRole("button", { name: "实例列表", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
-      const table = page.getByRole("table", { name: "监控实例列表" });
-      await expect(table.locator("tbody tr")).toHaveCount(50);
-      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["实例名称", "状态", "系统 / 架构", "CPU 使用率", "内存使用率", "最近连接", "最近上报"]);
+      const table = page.getByRole("table", { name: "实例列表" });
+      await expect(table.locator("tbody tr")).toHaveCount(51);
+      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["名称", "配对状态", "在线状态", "系统 / 架构", "授权码", "操作"]);
       const cells = table.locator("tbody tr").first().locator("td");
-      assert.deepEqual((await cells.allTextContents()).slice(0, 4), ["在线", "linux / x86_64", "未上报", "25.0%"]);
-      assert.equal(await cells.last().textContent(), "尚未上报");
+      assert.deepEqual((await cells.allTextContents()).slice(0, 4), ["已配对", "在线", "linux / x86_64", "uci_00000000000000000000000000000000"]);
       assert.equal(await table.locator("tbody tr").first().evaluate(row => getComputedStyle(row).display), "table-row");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
       assert.equal(await page.getByRole("complementary").count(), 0);
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
-      await page.getByRole("button", { name: "下一页" }).click();
-      await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).waitFor();
-      await expect(table.locator("tbody tr")).toHaveCount(1);
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).click();
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
-      assert.ok(requested.includes(50));
+      assert.deepEqual([...new Set(requested)], [0]);
       await page.getByText("完整采集信息").click();
       assert.equal(await page.getByText("client_version", { exact: true }).count(), 0);
       await page.getByText("注册时间", { exact: true }).waitFor();

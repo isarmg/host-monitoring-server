@@ -30,7 +30,7 @@ class ReleaseToolingTests(unittest.TestCase):
         spec.loader.exec_module(writer)
         identity = json.loads((SCRIPT.parent.parent / "host-monitoring-server/release.json").read_text())
         identity["source_revision"] = "a" * 40
-        for revision, accepted in [(5, True), (4, False)]:
+        for revision, accepted in [(6, True), (5, False)]:
             identity["schema_revision"] = revision
             result = MagicMock(returncode=0, stderr=b"", stdout=(json.dumps(identity) + "\n").encode())
             with patch.object(writer.subprocess, "run", return_value=result):
@@ -68,11 +68,11 @@ class ReleaseToolingTests(unittest.TestCase):
         readme = repository / PACKAGE.RELEASE_README
         text = readme.read_text(encoding="utf-8")
         self.assertGreater(len(text.encode("utf-8")), 10_000)
-        self.assertIn("Host Monitoring Server 0.9.12 发行包部署手册", text)
+        self.assertIn("Host Monitoring Server 0.9.13 发行包部署手册", text)
         self.assertIn("bin/host-monitoring-server", text)
         self.assertIn("systemd/host-monitoring-server.service", text)
         self.assertIn("RELEASE-MANIFEST.json", text)
-        self.assertIn("| `schema_revision` | `5` |", text)
+        self.assertIn("| `schema_revision` | `6` |", text)
         self.assertIn(
             "HOST_MONITORING_CLIENT_AUTHORIZATION_KEY=REPLACE_WITH_BASE64_ENCODED_32_RANDOM_BYTES",
             text,

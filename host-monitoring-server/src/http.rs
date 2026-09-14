@@ -19,7 +19,8 @@ use chrono::Utc;
 use host_protocol::{
     ActivateClientRequest, ActivateClientResponse, ActivatePairingStatus,
     CLIENT_REPORT_MAX_BODY_BYTES, ClientPairingRequest, ClientPairingResponse,
-    ClientPairingStatusResponse, ClientReport, ClientReportAck,
+    ClientPairingStatusResponse, ClientReport, ClientReportAck, CredentialStatus,
+    CredentialStatusResponse, HOST_PAIRING_PROTOCOL_VERSION,
 };
 use sarmg_admin_auth::AdministratorOriginMode;
 use sarmg_admin_core::AdministratorService;
@@ -294,6 +295,10 @@ pub fn router(
         ));
     let client = Router::new()
         .route(host_protocol::CLIENT_REPORT_PATH, post(report))
+        .route(
+            host_protocol::CLIENT_CREDENTIAL_STATUS_PATH,
+            get(credential_status),
+        )
         .route(
             host_protocol::CLIENT_PAIRING_REQUESTS_PATH,
             post(create_pairing),
@@ -613,6 +618,7 @@ async fn activate(
     }
     match store::activate(
         &state.pool,
+        &state.secrets,
         id,
         &crate::token_hash(&request.activation_code),
         actor,
@@ -640,6 +646,28 @@ async fn activate(
             "activation code or pairing request already used".into(),
         )),
     }
+}
+
+async fn credential_status(State(state): State<AppState>, headers: HeaderMap) -> Result<Response> {
+    let credential = authorization(&headers, "bearer").ok_or(Error::Unauthorized)?;
+    if !(32..=256).contains(&credential.len()) || credential.chars().any(char::is_whitespace) {
+        return Err(Error::Unauthorized);
+    }
+    let host = store::host_for_token(&state.pool, &crate::token_hash(credential))
+        .await
+        .map_err(database)?
+        .ok_or(Error::Unauthorized)?;
+    let mut response = Json(CredentialStatusResponse {
+        status: CredentialStatus::Authorized,
+        host_id: host.to_string(),
+        instance_id: host.to_string(),
+        protocol_version: HOST_PAIRING_PROTOCOL_VERSION,
+    })
+    .into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(response)
 }
 
 fn activation_url(request_id: uuid::Uuid) -> String {
@@ -905,15 +933,22 @@ mod tests {
         request
     }
 
-    fn pairing_request(host_id: uuid::Uuid, peer: &str, nonce: char) -> Request<Body> {
+    fn pairing_request(
+        host_id: uuid::Uuid,
+        peer: &str,
+        nonce: char,
+        protocol_version: u16,
+        client_version: &str,
+    ) -> Request<Body> {
         let body = serde_json::json!({
+            "protocol_version": protocol_version,
             "host": {
                 "id": host_id,
                 "os": "linux",
                 "os_version": "test",
                 "kernel_version": "test",
                 "arch": "x86_64",
-                "client_version": env!("CARGO_PKG_VERSION")
+                "client_version": client_version
             },
             "token_hash": nonce.to_string().repeat(64),
             "polling_secret_hash": if nonce == 'a' { "b".repeat(64) } else { "c".repeat(64) }
@@ -1008,6 +1043,37 @@ mod tests {
                 .status(),
             StatusCode::UNAUTHORIZED
         );
+    }
+
+    #[tokio::test]
+    async fn pairing_endpoint_uses_protocol_version_instead_of_client_release() {
+        let application = app().await;
+        let accepted = application
+            .clone()
+            .oneshot(pairing_request(
+                uuid::Uuid::new_v4(),
+                "192.0.2.80:41000",
+                'a',
+                host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+                "0.9.999",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::CREATED);
+
+        let rejected = application
+            .oneshot(pairing_request(
+                uuid::Uuid::new_v4(),
+                "192.0.2.81:41000",
+                'd',
+                2,
+                "0.9.999",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        let envelope = error_envelope(rejected).await;
+        assert_eq!(envelope.code.as_str(), "unsupported_client_protocol");
     }
 
     #[tokio::test]
@@ -1119,6 +1185,8 @@ mod tests {
                 uuid::Uuid::new_v4(),
                 "192.0.2.50:41000",
                 'a',
+                host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+                env!("CARGO_PKG_VERSION"),
             ))
             .await
             .unwrap();
@@ -1129,6 +1197,8 @@ mod tests {
                 uuid::Uuid::new_v4(),
                 "192.0.2.50:41001",
                 'd',
+                host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+                env!("CARGO_PKG_VERSION"),
             ))
             .await
             .unwrap();

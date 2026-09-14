@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
-use host_protocol::{Capability, ClientPairingRequest, ClientReport, PairingStatus};
+use host_protocol::{
+    Capability, ClientPairingMode, ClientPairingRequest, ClientReport, PairingStatus,
+};
 use sarmg_admin_core::AdministratorStore;
 use sqlx::{Acquire, FromRow, Row, Sqlite, SqlitePool, Transaction, types::Json};
 use uuid::Uuid;
@@ -352,11 +354,12 @@ pub async fn create_pairing(
     // Serialize identical polling secrets without locking the whole table.
     // SQLite serializes writes with its database lock; no advisory lock is needed.
     let existing = sqlx::query(
-        "SELECT request_id,requested_host_id,os,os_version,kernel_version,arch,client_version,token_hash,status,expires_at \
+        "SELECT request_id,requested_host_id,pairing_mode,os,os_version,kernel_version,arch,client_version,token_hash,status,expires_at \
          FROM client_pairing_requests WHERE polling_secret_hash=?",
     ).bind(&request.polling_secret_hash).fetch_optional(&mut *tx).await?;
     if let Some(row) = existing {
         let matches = row.try_get::<Uuid, _>("requested_host_id")?.to_string() == request.host.id
+            && row.try_get::<String, _>("pairing_mode")? == pairing_mode(request.mode)
             && row.try_get::<String, _>("os")? == request.host.os.trim()
             && row.try_get::<Option<String>, _>("os_version")? == request.host.os_version
             && row.try_get::<Option<String>, _>("kernel_version")? == request.host.kernel_version
@@ -419,12 +422,13 @@ pub async fn create_pairing(
     let expires_at = created_at + chrono::Duration::minutes(15);
     let result = sqlx::query(
         r#"INSERT INTO client_pairing_requests(
-               request_id,requested_host_id,os,os_version,kernel_version,arch,client_version,
+               request_id,requested_host_id,pairing_mode,os,os_version,kernel_version,arch,client_version,
                token_hash,polling_secret_hash,expires_at,created_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING"#,
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING"#,
     )
     .bind(request_id)
     .bind(requested_host_id)
+    .bind(pairing_mode(request.mode))
     .bind(request.host.os.trim())
     .bind(&request.host.os_version)
     .bind(&request.host.kernel_version)
@@ -503,13 +507,14 @@ pub enum ActivateResult {
 
 pub async fn activate(
     pool: &SqlitePool,
+    secrets: &crate::crypto::SecretBox,
     request_id: Uuid,
     activation_hash: &str,
     actor: &str,
 ) -> anyhow::Result<ActivateResult> {
     let mut tx = pool.begin().await?;
     let pairing = sqlx::query(
-        "SELECT request_id,os,os_version,kernel_version,arch,client_version,token_hash,status,invite_id,instance_id,expires_at \
+        "SELECT request_id,requested_host_id,pairing_mode,os,os_version,kernel_version,arch,client_version,token_hash,status,invite_id,instance_id,expires_at \
          FROM client_pairing_requests WHERE request_id=?",
     ).bind(request_id).fetch_optional(&mut *tx).await?;
     let Some(pairing) = pairing else {
@@ -517,7 +522,7 @@ pub async fn activate(
         return Ok(ActivateResult::NotFound);
     };
     let invite = sqlx::query(
-        "SELECT invite_id,instance_id,display_name,status FROM client_instance_invites \
+        "SELECT invite_id,instance_id,display_name,status,authorization_code_enc FROM client_instance_invites \
          WHERE activation_code_hash=?",
     )
     .bind(activation_hash)
@@ -528,7 +533,13 @@ pub async fn activate(
         return Ok(ActivateResult::InvalidCode);
     };
     let invite_id: Uuid = invite.try_get("invite_id")?;
-    let instance_id: Uuid = invite.try_get("instance_id")?;
+    let invite_instance_id: Uuid = invite.try_get("instance_id")?;
+    let mode = parse_pairing_mode(&pairing.try_get::<String, _>("pairing_mode")?)?;
+    let requested_host_id: Uuid = pairing.try_get("requested_host_id")?;
+    let instance_id = match mode {
+        ClientPairingMode::Fresh => invite_instance_id,
+        ClientPairingMode::RecoverIdentity => requested_host_id,
+    };
     let pairing_status: String = pairing.try_get("status")?;
     if pairing_status == "active" {
         let same = pairing.try_get::<Option<Uuid>, _>("invite_id")? == Some(invite_id)
@@ -552,6 +563,38 @@ pub async fn activate(
     if pairing.try_get::<DateTime<Utc>, _>("expires_at")? <= now {
         tx.rollback().await?;
         return Ok(ActivateResult::Expired);
+    }
+    if mode == ClientPairingMode::RecoverIdentity {
+        let host_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM monitored_hosts WHERE host_id=?)")
+                .bind(instance_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let invite_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM client_instance_invites WHERE instance_id=? AND invite_id<>?)",
+        )
+        .bind(instance_id)
+        .bind(invite_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if host_exists || invite_exists {
+            tx.rollback().await?;
+            return Ok(ActivateResult::Conflict);
+        }
+        let code = secrets.decrypt(
+            invite_instance_id,
+            &invite.try_get::<Vec<u8>, _>("authorization_code_enc")?,
+        )?;
+        let rebound = secrets.encrypt(instance_id, &code)?;
+        sqlx::query(
+            "UPDATE client_instance_invites SET instance_id=?,authorization_code_enc=? WHERE invite_id=? AND instance_id=?",
+        )
+        .bind(instance_id)
+        .bind(rebound)
+        .bind(invite_id)
+        .bind(invite_instance_id)
+        .execute(&mut *tx)
+        .await?;
     }
     let token_hash: String = pairing.try_get("token_hash")?;
     sqlx::query(
@@ -591,6 +634,21 @@ pub async fn activate(
     .await?;
     tx.commit().await?;
     Ok(ActivateResult::Active(instance_id))
+}
+
+fn pairing_mode(mode: ClientPairingMode) -> &'static str {
+    match mode {
+        ClientPairingMode::Fresh => "fresh",
+        ClientPairingMode::RecoverIdentity => "recover_identity",
+    }
+}
+
+fn parse_pairing_mode(value: &str) -> anyhow::Result<ClientPairingMode> {
+    match value {
+        "fresh" => Ok(ClientPairingMode::Fresh),
+        "recover_identity" => Ok(ClientPairingMode::RecoverIdentity),
+        _ => anyhow::bail!("invalid pairing mode in database"),
+    }
 }
 
 pub async fn host_for_token(pool: &SqlitePool, token_hash: &str) -> anyhow::Result<Option<Uuid>> {

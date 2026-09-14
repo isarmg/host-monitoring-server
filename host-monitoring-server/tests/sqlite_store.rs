@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Duration, Utc};
 use host_monitoring_server::{database_schema, model, store, token_hash};
 use host_protocol::{
-    Capability, ClientHealth, ClientPairingRequest, ClientReport, CpuSnapshot, DiskSnapshot,
-    HostIdentity, MemorySnapshot, NetworkSnapshot, PairingStatus, SystemSnapshot,
+    Capability, ClientHealth, ClientPairingMode, ClientPairingRequest, ClientReport, CpuSnapshot,
+    DiskSnapshot, HostIdentity, MemorySnapshot, NetworkSnapshot, PairingStatus, SystemSnapshot,
 };
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions, sqlite::SqlitePoolOptions};
 use uuid::Uuid;
@@ -107,6 +107,8 @@ async fn pending_pairings_are_capped_per_device_without_breaking_idempotent_retr
 
     for index in 0..4 {
         let request = ClientPairingRequest {
+            protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+            mode: ClientPairingMode::Fresh,
             host: host(host_id, "linux"),
             token_hash: token_hash(&format!("client-token-{index}")),
             polling_secret_hash: token_hash(&format!("polling-secret-{index}")),
@@ -124,6 +126,8 @@ async fn pending_pairings_are_capped_per_device_without_breaking_idempotent_retr
     }
 
     let rejected = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::Fresh,
         host: host(host_id, "linux"),
         token_hash: token_hash("client-token-over-budget"),
         polling_secret_hash: token_hash("polling-secret-over-budget"),
@@ -162,6 +166,8 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
         store::CancelInviteResult::Cancelled
     ));
     let pairing = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::Fresh,
         host: host(Uuid::new_v4(), "linux"),
         token_hash: token_hash("device-secret"),
         polling_secret_hash: token_hash("polling-secret"),
@@ -172,7 +178,7 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
         panic!("pair failed")
     };
     assert!(matches!(
-        store::activate(&pool, request_id, &token_hash(&code), "admin")
+        store::activate(&pool, &secrets, request_id, &token_hash(&code), "admin")
             .await
             .unwrap(),
         store::ActivateResult::Conflict
@@ -219,6 +225,8 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
 
     let old_token_hash = token_hash("old-client-token");
     let first = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::Fresh,
         host: host(Uuid::new_v4(), "linux"),
         token_hash: old_token_hash.clone(),
         polling_secret_hash: token_hash("old-polling-token"),
@@ -229,7 +237,7 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
         panic!("pairing request failed")
     };
     assert!(matches!(
-        store::activate(&pool, request_id, &token_hash(&old_code), "admin")
+        store::activate(&pool, &secrets, request_id, &token_hash(&old_code), "admin")
             .await
             .unwrap(),
         store::ActivateResult::Active(_)
@@ -263,6 +271,8 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
 
     let new_token_hash = token_hash("new-client-token");
     let second = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::Fresh,
         host: host(Uuid::new_v4(), "linux"),
         token_hash: new_token_hash.clone(),
         polling_secret_hash: token_hash("new-polling-token"),
@@ -273,13 +283,13 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
         panic!("replacement pairing request failed")
     };
     assert!(matches!(
-        store::activate(&pool, request_id, &token_hash(&old_code), "admin")
+        store::activate(&pool, &secrets, request_id, &token_hash(&old_code), "admin")
             .await
             .unwrap(),
         store::ActivateResult::InvalidCode
     ));
     assert!(matches!(
-        store::activate(&pool, request_id, &token_hash(&new_code), "admin")
+        store::activate(&pool, &secrets, request_id, &token_hash(&new_code), "admin")
             .await
             .unwrap(),
         store::ActivateResult::Active(_)
@@ -290,6 +300,86 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
             .unwrap()
             .is_some()
     );
+
+    pool.close().await;
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn recovery_preserves_an_absent_host_identity_and_never_overwrites_an_existing_host() {
+    let path = database_path();
+    let pool = open_database(&path).await;
+    store::initialize_empty(&pool).await.unwrap();
+    let secrets = host_monitoring_server::crypto::SecretBox::new([0x42; 32]);
+    let old_host_id = Uuid::new_v4();
+
+    let (created, code) = store::create_invite(&pool, &secrets, "Recovered host", "admin")
+        .await
+        .unwrap();
+    let store::CreateInviteResult::Created(invite) = created else {
+        panic!("invite creation failed")
+    };
+    assert_ne!(invite.instance_id, old_host_id.to_string());
+    let code = code.unwrap();
+    let credential_hash = token_hash("recovered-host-token");
+    let request = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::RecoverIdentity,
+        host: host(old_host_id, "windows"),
+        token_hash: credential_hash.clone(),
+        polling_secret_hash: token_hash("recovered-host-polling"),
+    };
+    let store::CreatePairingResult::Ready { request_id, .. } =
+        store::create_pairing(&pool, &request).await.unwrap()
+    else {
+        panic!("recovery request creation failed")
+    };
+    assert!(matches!(
+        store::activate(&pool, &secrets, request_id, &token_hash(&code), "admin")
+            .await
+            .unwrap(),
+        store::ActivateResult::Active(id) if id == old_host_id
+    ));
+    assert_eq!(
+        store::host_for_token(&pool, &credential_hash)
+            .await
+            .unwrap(),
+        Some(old_host_id)
+    );
+    let rebound = store::list_invites(&pool, &secrets).await.unwrap();
+    assert_eq!(rebound[0].instance_id, old_host_id.to_string());
+    assert_eq!(rebound[0].authorization_code, code);
+
+    let (second, second_code) = store::create_invite(&pool, &secrets, "Collision", "admin")
+        .await
+        .unwrap();
+    let store::CreateInviteResult::Created(_) = second else {
+        panic!("second invite creation failed")
+    };
+    let second_request = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::RecoverIdentity,
+        host: host(old_host_id, "linux"),
+        token_hash: token_hash("collision-token"),
+        polling_secret_hash: token_hash("collision-polling"),
+    };
+    let store::CreatePairingResult::Ready { request_id, .. } =
+        store::create_pairing(&pool, &second_request).await.unwrap()
+    else {
+        panic!("second recovery request creation failed")
+    };
+    assert!(matches!(
+        store::activate(
+            &pool,
+            &secrets,
+            request_id,
+            &token_hash(&second_code.unwrap()),
+            "admin",
+        )
+        .await
+        .unwrap(),
+        store::ActivateResult::Conflict
+    ));
 
     pool.close().await;
     std::fs::remove_file(path).unwrap();
@@ -328,6 +418,8 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
     let client_token_hash = token_hash(client_token);
     let polling_secret_hash = token_hash(polling_secret);
     let pairing = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::Fresh,
         host: host(Uuid::new_v4(), "linux"),
         token_hash: client_token_hash.clone(),
         polling_secret_hash: polling_secret_hash.clone(),
@@ -351,9 +443,15 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
             .expect("pairing request includes created_at");
     assert!(pairing_created_at.is_some());
 
-    let activated = store::activate(&pool, request_id, &token_hash(&activation_code), "admin")
-        .await
-        .expect("activate pairing");
+    let activated = store::activate(
+        &pool,
+        &secrets,
+        request_id,
+        &token_hash(&activation_code),
+        "admin",
+    )
+    .await
+    .expect("activate pairing");
     match activated {
         store::ActivateResult::Active(id) => assert_eq!(id, instance_id),
         _ => panic!("valid invite did not activate the pairing"),

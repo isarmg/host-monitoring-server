@@ -153,6 +153,8 @@ CREATE TABLE client_instance_invites (
 CREATE TABLE client_pairing_requests (
     request_id           TEXT PRIMARY KEY,
     requested_host_id    TEXT NOT NULL,
+    pairing_mode         TEXT NOT NULL DEFAULT 'fresh'
+                             CHECK(pairing_mode IN ('fresh', 'recover_identity')),
     os                   TEXT NOT NULL,
     os_version           TEXT,
     kernel_version       TEXT,

@@ -11,6 +11,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("{0}")]
     BadRequest(String),
+    #[error(
+        "unsupported host pairing protocol version {received}; supported version is {supported}"
+    )]
+    UnsupportedClientProtocol { received: u16, supported: u16 },
     #[error("unauthorized")]
     Unauthorized,
     #[error("forbidden")]
@@ -52,7 +56,7 @@ pub(crate) struct FoundationErrorEnvelope;
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let status = match &self {
-            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::BadRequest(_) | Self::UnsupportedClientProtocol { .. } => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden | Self::ClientHostMismatch => StatusCode::FORBIDDEN,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
@@ -77,6 +81,9 @@ impl IntoResponse for Error {
         let message = self.to_string();
         let mut envelope = match &self {
             Self::BadRequest(_) => ErrorEnvelope::new(HttpStatus::BadRequest, message),
+            Self::UnsupportedClientProtocol { .. } => {
+                product_envelope("unsupported_client_protocol", message, false)
+            }
             Self::Unauthorized => ErrorEnvelope::new(HttpStatus::Unauthorized, message),
             Self::Forbidden => ErrorEnvelope::new(HttpStatus::Forbidden, message),
             Self::ClientHostMismatch => product_envelope("client_host_mismatch", message, false),
@@ -95,6 +102,15 @@ impl IntoResponse for Error {
         };
         if let Some(retry_after) = retry_after {
             envelope = envelope.with_detail("retry_after_seconds", retry_after);
+        }
+        if let Self::UnsupportedClientProtocol {
+            received,
+            supported,
+        } = self
+        {
+            envelope = envelope
+                .with_detail("received", received)
+                .with_detail("supported", [supported]);
         }
         let mut response = (status, Json(envelope)).into_response();
         response.extensions_mut().insert(FoundationErrorEnvelope);
@@ -208,6 +224,26 @@ mod tests {
                 "message": "client report rate exceeded",
                 "retryable": true,
                 "details": {"retry_after_seconds": 3}
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn unsupported_protocol_is_a_structured_non_retryable_error() {
+        let response = Error::UnsupportedClientProtocol {
+            received: 2,
+            supported: 1,
+        }
+        .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            json!({
+                "code": "unsupported_client_protocol",
+                "message": "unsupported host pairing protocol version 2; supported version is 1",
+                "retryable": false,
+                "details": {"received": 2, "supported": [1]}
             })
         );
     }
