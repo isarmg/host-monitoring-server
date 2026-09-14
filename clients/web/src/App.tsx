@@ -1,12 +1,12 @@
-import { t } from "../shell/i18n.js";
-import { createSarmgAdminApplication, errorRequestId, useAdminApplication } from "../shell/index.js";
+import { t } from "@sarmg/admin-ui/i18n";
+import { createSarmgAdminApplication, errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import { Button, EmptyState, ErrorState, LoadingState } from "@sarmg/admin-ui";
 import { useEffect, useState } from "react";
 import { CURRENT_API_PREFIX, administratorApi, isHostListResponse, type HostListResponse } from "./api";
 import { Instances } from "./Instances";
 import { HostDetails } from "./HostDetails";
 import { HostsTable } from "./HostsTable";
-import { InstanceHeaderActions, InstancePageNavigation, type InstancePage } from "../shell/index.js";
+import { InstanceHeaderActions, InstancePageNavigation, type InstancePage } from "@sarmg/admin-shell";
 
 function HostsPage() {
   const { client } = useAdminApplication();

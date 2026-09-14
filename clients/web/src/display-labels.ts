@@ -1,4 +1,4 @@
-import { t } from "../shell/i18n.js";
+import { t } from "@sarmg/admin-ui/i18n";
 const labels: Record<string, readonly [string, string]> = {
   id: ["标识", "ID"], name: ["名称", "Name"], os: ["操作系统", "Operating system"], arch: ["架构", "Architecture"],
   registered_at: ["注册时间", "Registered at"], last_seen_at: ["最近连接", "Last connection"], latest_collected_at: ["最近上报", "Last report"],

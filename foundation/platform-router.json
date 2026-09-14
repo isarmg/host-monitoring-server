@@ -1,6 +1,0 @@
-{
-  "source": "sarmg-foundation-server/rust/crates/sarmg-server-runtime/src/lib.rs",
-  "license": "Apache-2.0",
-  "diagnostics": false,
-  "sha256": "12ac15a7aa90c0ccaa695cd6ad863a97ff782996ef6aa71271af3b2a152d31bd"
-}

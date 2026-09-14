@@ -1,4 +1,4 @@
-import { t, getLocale } from "../shell/i18n.js";
+import { t, getLocale } from "@sarmg/admin-ui/i18n";
 import { Button, EmptyState, Table } from "@sarmg/admin-ui";
 import type { Host } from "./api";
 

@@ -1,6 +1,3 @@
-#[path = "../../foundation/platform_router.rs"]
-mod foundation_platform;
-
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -129,7 +126,7 @@ pub fn product_descriptor() -> sarmg_server_runtime::ProductDescriptor {
     sarmg_server_runtime::ProductDescriptor {
         id: "host-monitoring".into(),
         version: env!("CARGO_PKG_VERSION").into(),
-        foundation_revision: "77e7ad7af8e1bf62432bd6bdd8fa9aff54cb39d1".into(),
+        foundation_revision: env!("SARMG_FOUNDATION_REVISION").into(),
         profile: "server-control-plane".into(),
         capabilities: vec![
             "admin-persistent".into(),
@@ -257,7 +254,7 @@ pub fn router(
     state: AppState,
     static_dir: PathBuf,
 ) -> std::result::Result<Router, sarmg_admin_core::Error> {
-    let platform = foundation_platform::platform_router(
+    let platform = sarmg_server_runtime::platform_router(
         state.runtime.clone(),
         "host-monitoring",
         state.administrator_origin,

@@ -1,9 +1,9 @@
 import { displayLabel } from "./display-labels";
-import { t } from "../shell/i18n.js";
-import { InstanceNameField } from "../shell/index.js";
+import { t } from "@sarmg/admin-ui/i18n";
+import { InstanceNameField } from "@sarmg/admin-shell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, ConfirmDangerDialog, ErrorState, FormField, TextField } from "@sarmg/admin-ui";
-import { errorRequestId, useAdminApplication } from "../shell/index.js";
+import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import { isNoContent, type Host } from "./api";
 
 export function HostDetails({ host, changed }: { host: Host; changed(): void }) {

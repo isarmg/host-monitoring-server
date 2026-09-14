@@ -1,9 +1,9 @@
 import { displayLabel } from "./display-labels";
-import { t, getLocale } from "../shell/i18n.js";
-import { InstanceNameField } from "../shell/index.js";
+import { t, getLocale } from "@sarmg/admin-ui/i18n";
+import { InstanceNameField } from "@sarmg/admin-shell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Dialog, ErrorState, FormField, TextField, Table, EmptyState, LoadingState, ConfirmDangerDialog } from "@sarmg/admin-ui";
-import { errorRequestId, useAdminApplication } from "../shell/index.js";
+import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import { isActivation, isCreatedInstance, isInstance, isInstances, isNoContent, isPairingSummary, isUuid,
   type ClientInstance, type CreatedInstance, type PairingSummary } from "./api";
 
