@@ -71,8 +71,8 @@ jobs:
             exit 1
           fi
           cargo pkgid --locked -p host-monitoring-server \
-            | grep -F '#0.9.11'
-          cargo pkgid --locked -p host-protocol | grep -F '#host-protocol@0.9.11'
+            | grep -F '#0.9.12'
+          cargo pkgid --locked -p host-protocol | grep -F '#host-protocol@0.9.12'
       - name: Check Server and protocol
         run: >-
           cargo check --locked --target x86_64-unknown-linux-gnu
