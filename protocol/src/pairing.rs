@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{HostIdentity, report::deserialize_canonical_uuid};
 
-/// Exact HTTP surface shared by Host Monitoring 0.7 Server and Client.
+/// Exact HTTP surface shared by the current Host Monitoring Server and Client.
 /// There are deliberately no aliases for the former module-prefixed routes.
 pub const API_PREFIX: &str = "/api/v2";
 pub const CLIENT_REPORT_PATH: &str = "/api/v2/host-monitor/report";
@@ -24,14 +24,7 @@ pub const CLIENT_ADMIN_ACTIVATE_PATH: &str = "/api/v2/host-monitor/activate-admi
 pub const BROWSER_ACTIVATION_PATH_PREFIX: &str = "/activate/";
 
 /// Pairing wire contract implemented by this release.
-///
-/// A missing field decodes as version 1 so a Server can be rolled out before
-/// all existing Clients have started sending the explicit discriminator.
 pub const HOST_PAIRING_PROTOCOL_VERSION: u16 = 1;
-
-const fn default_host_pairing_protocol_version() -> u16 {
-    HOST_PAIRING_PROTOCOL_VERSION
-}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,9 +37,7 @@ pub enum ClientPairingMode {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClientPairingRequest {
-    #[serde(default = "default_host_pairing_protocol_version")]
     pub protocol_version: u16,
-    #[serde(default)]
     pub mode: ClientPairingMode,
     pub host: HostIdentity,
     pub token_hash: String,
@@ -212,15 +203,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_pairing_request_defaults_to_protocol_one() {
-        let request: ClientPairingRequest = serde_json::from_value(serde_json::json!({
+    fn pairing_request_requires_the_current_protocol_and_mode() {
+        let request = serde_json::from_value::<ClientPairingRequest>(serde_json::json!({
             "host": host(),
             "token_hash": "a".repeat(64),
             "polling_secret_hash": "b".repeat(64)
-        }))
-        .unwrap();
-        assert_eq!(request.protocol_version, HOST_PAIRING_PROTOCOL_VERSION);
-        assert_eq!(request.mode, ClientPairingMode::Fresh);
+        }));
+        assert!(request.is_err());
     }
 
     #[test]

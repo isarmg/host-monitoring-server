@@ -999,6 +999,7 @@ mod tests {
     ) -> Request<Body> {
         let body = serde_json::json!({
             "protocol_version": protocol_version,
+            "mode": "fresh",
             "host": {
                 "id": host_id,
                 "os": "linux",

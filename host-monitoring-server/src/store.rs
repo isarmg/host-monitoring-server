@@ -52,7 +52,6 @@ pub async fn ensure_admin_user(
     password: Option<&str>,
 ) -> anyhow::Result<()> {
     let store = sarmg_admin_sqlite::SqliteAdministratorStore::new(pool.clone());
-    store.validate_all_administrators().await?;
     let service = sarmg_admin_core::AdministratorService::new(store);
     if service.store().administrator_count().await? == 0 {
         let password = password.ok_or_else(|| {
@@ -64,6 +63,7 @@ pub async fn ensure_admin_user(
             .bootstrap_administrator(username, password, now_micros()?)
             .await?;
     }
+    service.store().validate_all_administrators().await?;
     Ok(())
 }
 
