@@ -5,7 +5,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Dialog, ErrorState, FormField, TextField, Table, EmptyState, LoadingState, ConfirmDangerDialog } from "@sarmg/admin-ui";
 import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import { isActivation, isCreatedInstance, isInstance, isInstances, isNoContent, isPairingSummary, isUuid,
-  type ClientInstance, type CreatedInstance, type Host, type PairingSummary } from "./api";
+  type ClientInstance, type ClientInstanceListResponse, type PairingSummary } from "./api";
+import type { CreatedInstance } from "./api";
 
 const instancesPath = "/api/v2/monitoring/client-instances";
 const labels = { pending: t("待配对", "Awaiting pairing"), active: t("已配对", "Paired"), cancelled: t("已取消", "Cancelled") };
@@ -32,13 +33,12 @@ function useAction() {
   return { pending, failure, run, idle: () => ref.current === null };
 }
 
-export function Instances({ hosts, totalHosts, hostsChanged, select, openCreateSignal = 0, refreshSignal = 0 }: { hosts: Host[]; totalHosts: number; hostsChanged(): void; select(id: string): void; openCreateSignal?: number; refreshSignal?: number }) {
+export function Instances({ creating, closeCreate, hostsChanged, select, refreshSignal = 0 }: { creating: boolean; closeCreate(): void; hostsChanged(): void; select(id: string): void; refreshSignal?: number }) {
   const { client, notify } = useAdminApplication();
-  const [rows, setRows] = useState<ClientInstance[] | null>(null);
+  const [response, setResponse] = useState<ClientInstanceListResponse | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [generation, setGeneration] = useState(0);
-  const [creating, setCreating] = useState(false);
-  useEffect(() => { if (openCreateSignal > 0) setCreating(true); }, [openCreateSignal]);
+  const [offset, setOffset] = useState(0);
   const [cancelling, setCancelling] = useState<ClientInstance | null>(null);
   const [rotating, setRotating] = useState<ClientInstance | null>(null);
   const [activation, setActivation] = useState<string | null>(() => {
@@ -46,38 +46,57 @@ export function Instances({ hosts, totalHosts, hostsChanged, select, openCreateS
     return match ? match[1] : null;
   });
   const refresh = () => setGeneration(value => value + 1);
+  function created(value: CreatedInstance) {
+    const { activation_code: _activationCode, ...instance } = value;
+    setResponse(current => current === null ? current : {
+      ...current,
+      total: current.total + 1,
+      instances: current.offset === 0 ? [instance, ...current.instances].slice(0, current.limit) : current.instances,
+    });
+    refresh();
+  }
+  async function copyAuthorizationCode(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      notify(t("授权码已复制", "Authorization code copied"));
+    } catch {
+      notify(t("无法复制授权码，请手动选择复制。", "Unable to copy the authorization code. Select and copy it manually."));
+    }
+  }
   useEffect(() => {
-    const controller = new AbortController(); setRows(null); setFailure(null);
-    void client.request(instancesPath, isInstances, { signal: controller.signal })
-      .then(value => { if (!controller.signal.aborted) setRows(value); })
+    const controller = new AbortController(); setFailure(null);
+    void client.request(`${instancesPath}?limit=50&offset=${offset}`, isInstances, { signal: controller.signal })
+      .then(value => { if (!controller.signal.aborted) { setResponse(value); if (value.total > 0 && value.instances.length === 0) setOffset(Math.max(0, Math.floor((value.total - 1) / value.limit) * value.limit)); } })
       .catch(error => { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); });
     return () => controller.abort();
-  }, [client, generation, refreshSignal]);
+  }, [client, generation, offset, refreshSignal]);
   function closeActivation() {
     setActivation(null);
     if (window.location.pathname.startsWith("/activate/")) window.history.replaceState(null, "", "/#instances");
   }
-  const hostById = new Map(hosts.map(host => [host.id, host]));
-  const online = hosts.filter(host => host.status === "online").length;
+  const rows = response?.instances ?? null;
+  const hostById = new Map((response?.hosts ?? []).map(host => [host.id, host]));
+  const online = (response?.hosts ?? []).filter(host => host.status === "online").length;
   const pending = rows?.filter(row => row.status === "pending").length ?? 0;
   const paired = rows?.filter(row => row.status === "active").length ?? 0;
   return <div className="sarmg-content-stack"><section className="sarmg-content-stack" aria-labelledby="statistics-heading"><h2 id="statistics-heading">{t("统计", "Statistics")}</h2>
     <Table aria-label={t("实例统计", "Instance statistics")}><thead><tr><th>{t("统计项", "Metric")}</th><th>{t("当前值", "Current value")}</th></tr></thead><tbody>
-      <tr><th scope="row">{t("实例总数", "Total instances")}</th><td>{rows?.length ?? totalHosts}</td></tr>
-      <tr><th scope="row">{t("在线实例", "Online instances")}</th><td>{online}</td></tr>
-      <tr><th scope="row">{t("已配对实例", "Paired instances")}</th><td>{paired}</td></tr>
-      <tr><th scope="row">{t("待配对实例", "Instances awaiting pairing")}</th><td>{pending}</td></tr>
+      <tr><th scope="row">{t("实例总数", "Total instances")}</th><td>{response?.total ?? "—"}</td></tr>
+      <tr><th scope="row">{t("本页在线实例", "Online instances on this page")}</th><td>{online}</td></tr>
+      <tr><th scope="row">{t("本页已配对实例", "Paired instances on this page")}</th><td>{paired}</td></tr>
+      <tr><th scope="row">{t("本页待配对实例", "Instances awaiting pairing on this page")}</th><td>{pending}</td></tr>
     </tbody></Table></section>
     <section className="sarmg-content-stack" aria-labelledby="instances-heading"><h2 id="instances-heading">{t("实例列表", "Instance list")}</h2>
     <p>{t("列表统一显示配对、在线和监控状态。每个实例拥有一个长期授权码；更换后客户端必须重新配对。", "The list combines pairing, online, and monitoring state. Each instance has a long-lived authorization code; changing it requires the client to pair again.")}</p>
     {failure ? <ErrorState requestId={failure.requestId} onRetry={refresh}>{t("无法加载实例", "Unable to load instances")}</ErrorState>
       : rows === null ? <LoadingState>{t("正在加载实例…", "Loading instances…")}</LoadingState>
       : rows.length === 0 ? <EmptyState>{t("暂无实例", "No instances yet")}</EmptyState>
-      : <Table aria-label={t("实例列表", "Instance list")}><caption>{t("最近 200 条实例", "Most recent 200 instances")}</caption><thead><tr><th scope="col">{t("名称", "Name")}</th><th scope="col">{t("配对状态", "Pairing status")}</th><th scope="col">{t("在线状态", "Online status")}</th><th scope="col">{t("系统 / 架构", "System / architecture")}</th><th scope="col">{t("授权码", "Authorization code")}</th><th scope="col">{t("操作", "Actions")}</th></tr></thead>
+      : <><Table aria-label={t("实例列表", "Instance list")}><caption>{t("实例 {0}–{1}，共 {2} 个", "Instances {0}–{1} of {2}", [String(response!.offset + 1), String(response!.offset + rows.length), String(response!.total)])}</caption><thead><tr><th scope="col">{t("名称", "Name")}</th><th scope="col">{t("配对状态", "Pairing status")}</th><th scope="col">{t("在线状态", "Online status")}</th><th scope="col">{t("系统 / 架构", "System / architecture")}</th><th scope="col">{t("授权码", "Authorization code")}</th><th scope="col">{t("操作", "Actions")}</th></tr></thead>
         <tbody>{rows.map(row => { const host = hostById.get(row.instance_id); return <tr key={row.request_id}><th scope="row">{host ? <Button aria-label={t("选择实例 {0}", "Select instance {0}", [row.display_name])} onClick={() => select(host.id)}>{row.display_name}</Button> : row.display_name}</th><td>{labels[row.status]}</td>
-        <td>{host ? host.status === "online" ? t("在线", "Online") : t("离线", "Offline") : t("尚未上报", "Not yet reported")}</td><td>{host ? `${host.os} / ${host.arch}` : "—"}</td>
-        <td><code>{row.authorization_code}</code></td><td>{row.status !== "cancelled" && <Button onClick={() => setRotating(row)}>{t("更换授权码", "Change code")}</Button>}{(row.status === "pending" || row.status === "cancelled") && <Button onClick={() => setCancelling(row)}>{row.status === "pending" ? t("取消配对", "Cancel pairing") : t("删除实例", "Delete instance")}</Button>}</td></tr>; })}</tbody></Table>}
-    {creating && <CreateInstance close={() => setCreating(false)} changed={refresh} />}
+        <td>{host ? displayLabel(host.status) : row.status === "active" ? t("等待首次上报", "Waiting for first report") : "—"}</td><td>{host ? `${host.os} / ${host.arch}` : "—"}</td>
+        <td><code>{row.authorization_code}</code> <Button onClick={() => void copyAuthorizationCode(row.authorization_code)}>{t("复制", "Copy")}</Button></td><td>{row.status !== "cancelled" && <Button onClick={() => setRotating(row)}>{t("更换授权码", "Change code")}</Button>}{(row.status === "pending" || row.status === "cancelled") && <Button onClick={() => setCancelling(row)}>{row.status === "pending" ? t("取消配对", "Cancel pairing") : t("删除实例", "Delete instance")}</Button>}</td></tr>; })}</tbody></Table>
+        <div className="sarmg-actions"><Button disabled={response!.offset === 0} onClick={() => setOffset(Math.max(0, response!.offset - response!.limit))}>{t("上一页", "Previous")}</Button><Button disabled={response!.offset + rows.length >= response!.total} onClick={() => setOffset(response!.offset + response!.limit)}>{t("下一页", "Next")}</Button></div></>}
+    {creating && <CreateInstance close={closeCreate} changed={created} />}
     {cancelling && <CancelInstance instance={cancelling} close={() => setCancelling(null)} changed={() => { setCancelling(null); refresh(); }} />}
     {rotating && <RotateInstance instance={rotating} close={() => setRotating(null)} changed={() => { setRotating(null); refresh(); hostsChanged(); notify(t("授权码已更换，客户端必须使用新码重新配对。", "Authorization code changed. The client must pair again with the new code.")); }} />}
     {activation !== null && <ActivateInstance initialId={activation} close={closeActivation} changed={() => {
@@ -95,31 +114,24 @@ function RotateInstance({ instance, close, changed }: { instance: ClientInstance
     })}>{action.failure && <ErrorState requestId={action.failure.requestId}>{t("更换未能确认，请刷新实例核对授权码和配对状态。", "The change could not be confirmed. Refresh and verify the code and pairing state.")}</ErrorState>}</ConfirmDangerDialog>;
 }
 
-function CreateInstance({ close, changed }: { close(): void; changed(): void }) {
-  const { client } = useAdminApplication();
+function CreateInstance({ close, changed }: { close(): void; changed(value: CreatedInstance): void }) {
+  const { client, notify } = useAdminApplication();
   const action = useAction();
-  const [result, setResult] = useState<CreatedInstance | null>(null);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     void action.run(async signal => {
       const value = await client.request(instancesPath, isCreatedInstance, { method: "POST", signal,
         body: JSON.stringify({ display_name: String(data.get("display_name")).trim() }) });
-      if (!signal.aborted) { setResult(value); changed(); }
+      if (!signal.aborted) { changed(value); close(); notify(t("实例已创建，授权码可在列表中查看和复制。", "Instance created. Its authorization code is available in the list.")); }
     });
   }
   return <Dialog title={t("新建 客户端 实例", "Create client instance")} onClose={() => { if (action.idle()) close(); }}>
-    {result ? <div>
-      <p role="status">{t("实例已创建：", "Instance created:")}{result.display_name}</p>
-      <p>{t("这是实例的长期授权码，之后仍可在实例列表查看和更换。请勿放入网址或日志。", "This is the instance's long-lived authorization code. It remains viewable and replaceable in the instance list. Never put it in URLs or logs.")}</p>
-      <FormField label={t("授权码", "Authorization code")}><TextField readOnly value={result.activation_code} autoComplete="off" onFocus={event => event.currentTarget.select()} /></FormField>
-      <p>{t("授权码不会因配对成功而失效；只有更换或取消实例才会失效。", "The code remains valid after pairing and changes only when the instance is rotated or cancelled.")}</p>
-      <Button onClick={close}>{t("已保存，关闭", "Saved; close")}</Button>
-    </div> : <form onSubmit={submit} aria-busy={action.pending}>
+    <form onSubmit={submit} aria-busy={action.pending}>
       {action.failure && <ErrorState requestId={action.failure.requestId}>{t("创建未能确认。请先刷新实例核对状态；丢失配对码的实例可取消后重新创建，不要重复提交。", "Creation could not be confirmed. Refresh and check first. If the code is lost, cancel the instance and create a new one; do not submit twice.")}</ErrorState>}
       <FormField label={t("实例名称", "Instance name")}><InstanceNameField name="display_name" required title={t("实例名称最多 32 个字符", "Instance names may contain up to 32 characters")} readOnly={action.pending} data-sarmg-initial-focus /></FormField>
       <p>{t("实例名称最多 32 个字符。", "Instance names may contain up to 32 characters.")}</p>
       <div className="sarmg-actions"><Button disabled={action.pending} onClick={close}>{t("取消", "Cancel")}</Button><Button type="submit" disabled={action.pending}>{action.pending ? t("正在创建…", "Creating…") : t("创建实例", "Create instance")}</Button></div>
-    </form>}
+    </form>
   </Dialog>;
 }
 

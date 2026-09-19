@@ -24,6 +24,7 @@ export async function withLocalServer({ prefix, binary, extraEnv = {} }, work) {
       [`${prefix}_STATIC_DIR`]: resolve("dist"),
       [`${prefix}_BOOTSTRAP_ADMIN_USERNAME`]: "admin",
       [`${prefix}_BOOTSTRAP_ADMIN_PASSWORD`]: password,
+      [`${prefix}_CLIENT_AUTHORIZATION_KEY`]: randomBytes(32).toString("base64"),
     });
     log = await open(join(root, "server.log"), "wx", 0o600);
     child = spawn(resolve(binary), ["serve"], { cwd: root, env, stdio: ["ignore", log.fd, log.fd] });

@@ -4,7 +4,8 @@ use chrono::{DateTime, Duration, Utc};
 use host_monitoring_server::{database_schema, model, store, token_hash};
 use host_protocol::{
     Capability, ClientHealth, ClientPairingMode, ClientPairingRequest, ClientReport, CpuSnapshot,
-    DiskSnapshot, HostIdentity, MemorySnapshot, NetworkSnapshot, PairingStatus, SystemSnapshot,
+    DiskSnapshot, GpuSnapshot, HostIdentity, MemorySnapshot, NetworkSnapshot, PairingStatus,
+    SystemSnapshot,
 };
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions, sqlite::SqlitePoolOptions};
 use uuid::Uuid;
@@ -93,6 +94,33 @@ fn report(host_id: Uuid, collected_at: DateTime<Utc>) -> ClientReport {
             collector_errors: 0,
         },
     }
+}
+
+#[test]
+fn gpu_temperature_uses_the_common_physical_bounds() {
+    let mut value = report(Uuid::new_v4(), Utc::now());
+    value.system.gpus.push(GpuSnapshot {
+        id: "gpu0".into(),
+        vendor: "test".into(),
+        name: "test gpu".into(),
+        utilization_percent: None,
+        memory_total_bytes: None,
+        memory_used_bytes: None,
+        temperature_celsius: Some(75.0),
+        power_watts: None,
+        core_clock_mhz: None,
+        memory_clock_mhz: None,
+        pcie_rx_bytes_per_second: None,
+        pcie_tx_bytes_per_second: None,
+        source: "test".into(),
+    });
+    assert!(model::validate_report(&value).is_ok());
+    for invalid in [-273.16, 1000.01, f64::NAN, f64::INFINITY] {
+        value.system.gpus[0].temperature_celsius = Some(invalid);
+        assert!(model::validate_report(&value).is_err());
+    }
+    value.system.gpus[0].temperature_celsius = None;
+    assert!(model::validate_report(&value).is_ok());
 }
 
 #[tokio::test]
@@ -190,7 +218,11 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
             .unwrap();
     assert!(!columns.iter().any(|name| name == "expires_at"));
     assert_eq!(
-        store::list_invites(&pool, &secrets).await.unwrap()[0].status,
+        store::list_invites(&pool, &secrets, 100, 0)
+            .await
+            .unwrap()
+            .0[0]
+            .status,
         "cancelled"
     );
     pool.close().await;
@@ -301,6 +333,42 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
             .is_some()
     );
 
+    let final_code = format!("uci_{}", Uuid::new_v4().simple());
+    store::rotate_invite_authorization(
+        &pool,
+        &secrets,
+        Uuid::parse_str(&invite.request_id).unwrap(),
+        &final_code,
+        "admin",
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(matches!(
+        store::cancel_invite(&pool, Uuid::parse_str(&invite.request_id).unwrap(), "admin")
+            .await
+            .unwrap(),
+        store::CancelInviteResult::Cancelled
+    ));
+    assert!(matches!(
+        store::cancel_invite(&pool, Uuid::parse_str(&invite.request_id).unwrap(), "admin")
+            .await
+            .unwrap(),
+        store::CancelInviteResult::Deleted
+    ));
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT (SELECT count(*) FROM monitored_hosts) + (SELECT count(*) FROM client_credentials) + (SELECT count(*) FROM client_metric_reports) + (SELECT count(*) FROM client_metric_hourly_aggregates) + (SELECT count(*) FROM client_pairing_requests) + (SELECT count(*) FROM client_instance_invites)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(remaining, 0);
+    let audits: i64 = sqlx::query_scalar("SELECT count(*) FROM audit_events")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(audits > 0);
+
     pool.close().await;
     std::fs::remove_file(path).unwrap();
 }
@@ -346,7 +414,10 @@ async fn recovery_preserves_an_absent_host_identity_and_never_overwrites_an_exis
             .unwrap(),
         Some(old_host_id)
     );
-    let rebound = store::list_invites(&pool, &secrets).await.unwrap();
+    let rebound = store::list_invites(&pool, &secrets, 100, 0)
+        .await
+        .unwrap()
+        .0;
     assert_eq!(rebound[0].instance_id, old_host_id.to_string());
     assert_eq!(rebound[0].authorization_code, code);
 
@@ -408,7 +479,11 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         .await
         .unwrap();
     assert_eq!(
-        store::list_invites(&pool, &secrets).await.unwrap()[0].status,
+        store::list_invites(&pool, &secrets, 100, 0)
+            .await
+            .unwrap()
+            .0[0]
+            .status,
         "pending"
     );
     let instance_id = Uuid::parse_str(&invite.instance_id).expect("canonical instance id");
@@ -537,6 +612,14 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
             .expect("renamed host exists")
             .0
             .name,
+        "Renamed Server"
+    );
+    assert_eq!(
+        store::list_invites(&pool, &secrets, 100, 0)
+            .await
+            .unwrap()
+            .0[0]
+            .display_name,
         "Renamed Server"
     );
 

@@ -32,7 +32,7 @@ Server 部署方式。
 ## 9.5 日常监控
 
 Server 应关注 readiness、认证失败、配对准入、429/503、SQLite/WAL、磁盘和 inode。当前产品没有
-metrics API，也没有暴露 writer queue 深度/延迟或 retention backlog；这些项目只能通过有限日志、HTTP
+metrics API，也没有暴露 writer queue 深度/延迟或 backlog 数量；retention worker 的连续失败会进入 readiness，其他项目只能通过有限日志、HTTP
 结果与数据库离线观察间接判断，不能在监控配置里引用不存在的指标。Client 关注服务状态、采集错误、
 spool 容量/最老条目、TLS、认证撤销和系统时钟。
 

@@ -44,10 +44,10 @@ React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session
 Foundation 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
 SQLite reopen 与 Router→Client 合同测试；不保留旧版本 fallback。
 
-当前 React 管理台以实例列表和实例详情为主线：列表提供总览、分页、CPU/内存摘要、实例简要信息和
-新建实例；详情提供完整采集字段，并可查看或轮换长期授权码、完成待处理配对、取消待配对实例、修改备注
-以及删除已配对实例。授权码轮换会撤销旧 Client credential，客户端必须重新配对。当前仍没有历史图表和
-audit 查询界面。
+当前 React 管理台以实例列表和实例详情为主线：列表提供有界分页、同页监控摘要、长期授权码和
+新建实例；创建成功后窗口立即关闭。详情每两秒自动读取同一快照的完整最新报告，页面隐藏或暂停时停止轮询，
+并提供 15 分钟至 30 天的有界自动粒度趋势。授权码轮换会撤销旧 Client credential，客户端必须重新配对。
+当前仍没有 audit 查询界面，也不保存逐设备历史。
 `cd clients/web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 分页、指标详情、移动主题与 WCAG AA 验收；
 首次运行需 `npx playwright install --with-deps chromium firefox`。该测试的 API 全部由本机测试数据拦截，不访问真实 Client。
 
@@ -105,7 +105,7 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 | `POST /api/v2/auth/logout` | 管理员 Session + CSRF + 同源 | 无业务正文 | 撤销当前 Session、删除其 CSRF 摘要、清除 Cookie；成功响应 `204 no-store` |
 | `GET /api/v2/monitoring/hosts` | 管理员 Session | query 只有 `limit/offset`；服务端钳到 1..1000，默认 200 | 分页 Host summary；React 总览与实例/详情入口共同使用 |
 | `GET /api/v2/monitoring/hosts/{host_id}` | 管理员 Session | canonical UUID | Host summary 与可空 latest 原始报告；当前 Web 详情使用列表中的同一投影，端点供独立调用方精确读取 |
-| `GET /api/v2/monitoring/hosts/{host_id}/history` | 管理员 Session | `from/to/limit`；`from <= to`；limit 1..1000，默认 300 | 仍保留的 raw 标量点；不读取 hourly aggregate |
+| `GET /api/v2/monitoring/hosts/{host_id}/history` | 管理员 Session | 原始模式使用 `from/to/limit`；图表模式使用 `from/to/resolution=auto/max_points`，跨度最多 31 天、点数 100..1000 | 原始点，或在同一快照内无重复合并 raw 与 hourly 的时间桶；响应明确粒度、来源和实际对齐范围 |
 | `GET/POST /api/v2/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，授权码不设有效期 | 列表最多 200 条并返回可查看的实例授权码；新建 `201`；成功响应 `no-store` |
 | `PUT /api/v2/monitoring/client-instances/{request_id}/authorization` | 管理员 Session + CSRF + 同源 | canonical UUID；exact `authorization_code`，当前 `uci_` 格式 | 更新加密密文/摘要、撤销旧 Client credential，并将实例恢复为 pending；Client 需重新配对 |
 | `DELETE /api/v2/monitoring/client-instances/{request_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；pending 首次调用转 cancelled，cancelled 再次调用永久删除 | `204`；不存在为 404，active 为 409；Web 分别显示“取消配对”和“删除实例” |
@@ -151,17 +151,16 @@ host-monitoring-server identity
 host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.14
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
-host-monitoring-server admin-reset-password --database-url sqlite:///path/app.db \
-  --username admin --password '<new-secret>'
+printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-password \
+  --database-url sqlite:///path/app.db --username admin
 ```
 
 `admin-create` 从 `HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME/PASSWORD` 读取首个账户；若库已有账户，它
-只验证现有记录。`admin-reset-password` 接受 `--username/--password`，先规范化 username，再写新的当前
+只验证现有记录。`admin-reset-password` 接受 `--username`，从标准输入读取一行有界密码，先规范化 username，再写新的当前
 Argon2id hash；Schema trigger 同时提升 `session_version`、撤销该账户全部 Session 并删除其 CSRF 摘要。
 两条管理员维护命令要求 maintenance 排他锁，因此应先停止运行实例。
 
-当前 reset CLI 的密码是 argv 参数，不支持 stdin/文件 Secret provider；这是明确的运维限制。不要把真实
-密码字面量写进可持久 Shell history、脚本、工单或日志，并限制同机进程列表与维护终端的访问。首次创建
+reset CLI 不从 argv 读取密码。不要把真实密码字面量写进可持久 Shell history、脚本、工单或日志。首次创建
 完成后从长期环境文件移除 bootstrap 明文密码。管理 Web 只允许一个管理员，不提供创建管理员入口。账号名称与密码通过右上角人物图标修改；历史管理员记录不代表当前允许多个管理员。
 
 ## 5. Client 配置与诊断
@@ -248,9 +247,9 @@ notarization/stapling，并保存签名者、时间戳、摘要和验证结果�
 
 ## 9. 数据库身份与当前不支持的数据操作
 
-Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、version `0.9.14`、
-schema revision `3` 与 SHA-256
-`233c8b12e9b09bc8a4f3dfa57309e5bc268de0aa958e8e0eb45555d75f94c410`；现场 `sqlite_schema` 重新计算也
+Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、格式版本 `0.9.14`、
+schema revision `6` 与 SHA-256
+`dc97f6526439673f7a633a15a2557e758e922bc49749f8b9562ee8ee3ed7048d`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
 必须一致。当前 DDL 中管理员列是 `_sarmg_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical
 username、非空 password hash、`active IN (0,1)`，`serve`/`admin-create` 加载已有行时再用 Foundation
 primitive 验证 username 和完整 current Argon2id 参数；DDL 还要求 `session_version > 0`，形成存储形状与
@@ -269,6 +268,8 @@ Host Monitoring 转换边，因此当前没有受支持的 Host 数据迁移、�
 过期/撤销的 `auth_sessions` 行没有全局清理 worker；pairing 只有创建新 pairing 时针对 expired
 pending/旧 denied 的有界清理和删除 Host 时的定向清理。长期实例必须把这些控制面表的增长视为已知
 运维缺口，不能误以为 `RAW_RETENTION_DAYS` 会覆盖它们，也不能在没有新合同/测试时手工删行。
+
+保留任务在仍有积压时按一秒下限继续有界批次，空闲后回到配置的巡检周期；失败指数退避，连续三次失败会让 `retention-worker` 健康检查降级。已经计入小时聚合的 raw 行仍按首次 `received_at` 至少保留一个 raw retention 窗口，因此确认丢失后的同 ID 重试在窗口内继续返回 `accepted=false`。窗口到期后的旧 ID 不承诺永久去重。
 
 ## 10. 监控与故障处理
 

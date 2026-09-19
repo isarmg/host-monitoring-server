@@ -31,9 +31,10 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::{
     error::{Error, FoundationErrorEnvelope, Result, database, framework_envelope},
     model::{
-        CreateClientInstanceRequest, CreatedClientInstance, HistoryQuery, HistoryResponse,
-        HostDetailResponse, HostListQuery, HostListResponse, UpdateClientAuthorizationRequest,
-        UpdateMonitoringRemarkRequest, canonical_uuid, validate_pairing, validate_report,
+        ClientInstanceListQuery, ClientInstanceListResponse, CreateClientInstanceRequest,
+        CreatedClientInstance, HistoryQuery, HistoryResponse, HostDetailResponse, HostListQuery,
+        HostListResponse, UpdateClientAuthorizationRequest, UpdateMonitoringRemarkRequest,
+        canonical_uuid, validate_pairing, validate_report,
     },
     store,
     telemetry::{
@@ -57,9 +58,13 @@ pub struct AppState {
 
 impl AppState {
     #[cfg(test)]
-    pub fn new(pool: sqlx::SqlitePool, origin: AdministratorOriginMode) -> Self {
+    pub fn new(
+        pool: sqlx::SqlitePool,
+        origin: AdministratorOriginMode,
+        secrets: crate::crypto::SecretBox,
+    ) -> Self {
         let (mut state, task) =
-            Self::with_telemetry_config(pool, origin, TelemetryWriterConfig::production());
+            Self::with_telemetry_config(pool, origin, TelemetryWriterConfig::production(), secrets);
         state._telemetry_task = Some(Arc::new(task));
         state
     }
@@ -68,19 +73,24 @@ impl AppState {
         pool: sqlx::SqlitePool,
         origin: AdministratorOriginMode,
         config: TelemetryWriterConfig,
+        secrets: crate::crypto::SecretBox,
     ) -> (Self, TelemetryWriterTask) {
         let (telemetry, task) = TelemetryWriter::start(pool.clone(), config);
-        (Self::with_telemetry_writer(pool, origin, telemetry), task)
+        (
+            Self::with_telemetry_writer(pool, origin, telemetry, secrets),
+            task,
+        )
     }
 
     pub fn with_telemetry_writer(
         pool: sqlx::SqlitePool,
         origin: AdministratorOriginMode,
         telemetry: TelemetryWriter,
+        secrets: crate::crypto::SecretBox,
     ) -> Self {
         let runtime = sarmg_server_runtime::platform_handle(product_descriptor())
             .expect("the compiled Host Monitoring descriptor is valid");
-        Self::with_runtime(pool, origin, telemetry, runtime)
+        Self::with_runtime(pool, origin, telemetry, runtime, secrets)
     }
 
     pub fn with_runtime(
@@ -88,13 +98,14 @@ impl AppState {
         administrator_origin: AdministratorOriginMode,
         telemetry: TelemetryWriter,
         runtime: sarmg_server_runtime::RuntimeHandle,
+        secrets: crate::crypto::SecretBox,
     ) -> Self {
         let administrator = Arc::new(AdministratorService::new(SqliteAdministratorStore::new(
             pool.clone(),
         )));
         Self {
             pool,
-            secrets: crate::crypto::SecretBox::new([0x42; 32]),
+            secrets,
             administrator,
             administrator_origin,
             runtime,
@@ -106,18 +117,13 @@ impl AppState {
         }
     }
 
-    pub fn with_secrets(mut self, secrets: crate::crypto::SecretBox) -> Self {
-        self.secrets = secrets;
-        self
-    }
-
     #[cfg(test)]
     fn with_pairing_admission(
         pool: sqlx::SqlitePool,
         origin: AdministratorOriginMode,
         pairing_admission: crate::pairing_admission::PairingAdmission,
     ) -> Self {
-        let mut state = Self::new(pool, origin);
+        let mut state = Self::new(pool, origin, crate::crypto::SecretBox::new([0x42; 32]));
         state.pairing_admission = pairing_admission;
         state
     }
@@ -425,14 +431,24 @@ async fn create_instance(
     }
 }
 
-async fn list_instances(State(state): State<AppState>) -> Result<Response> {
+async fn list_instances(
+    State(state): State<AppState>,
+    Query(query): Query<ClientInstanceListQuery>,
+) -> Result<Response> {
+    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let offset = query.offset.unwrap_or(0).max(0);
+    let (instances, hosts, total) = store::list_invites(&state.pool, &state.secrets, limit, offset)
+        .await
+        .map_err(database)?;
     Ok((
         [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
-        Json(
-            store::list_invites(&state.pool, &state.secrets)
-                .await
-                .map_err(database)?,
-        ),
+        Json(ClientInstanceListResponse {
+            instances,
+            hosts,
+            total,
+            limit,
+            offset,
+        }),
     )
         .into_response())
 }
@@ -794,11 +810,43 @@ async fn host_history(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(query): Query<HistoryQuery>,
-) -> Result<Json<HistoryResponse>> {
+) -> Result<Response> {
     let id = canonical_uuid(&id, "host id")?;
     if query.from.zip(query.to).is_some_and(|(from, to)| from > to) {
         return Err(Error::BadRequest(
             "history from must not be after to".into(),
+        ));
+    }
+    if let Some(resolution) = query.resolution.as_deref() {
+        if resolution != "auto" || query.limit.is_some() {
+            return Err(Error::BadRequest(
+                "chart history requires resolution=auto and max_points instead of limit".into(),
+            ));
+        }
+        let to = query.to.unwrap_or_else(Utc::now);
+        let from = query
+            .from
+            .unwrap_or_else(|| to - chrono::Duration::hours(1));
+        if from >= to || to - from > chrono::Duration::days(31) {
+            return Err(Error::BadRequest(
+                "chart history range must be greater than zero and at most 31 days".into(),
+            ));
+        }
+        let max_points = query.max_points.unwrap_or(720);
+        if !(100..=1000).contains(&max_points) {
+            return Err(Error::BadRequest(
+                "history max_points must be between 100 and 1000".into(),
+            ));
+        }
+        let series = store::history_series(&state.pool, id, from, to, max_points)
+            .await
+            .map_err(database)?
+            .ok_or_else(|| Error::NotFound("monitored host not found".into()))?;
+        return Ok(Json(series).into_response());
+    }
+    if query.max_points.is_some() {
+        return Err(Error::BadRequest(
+            "history max_points requires resolution=auto".into(),
         ));
     }
     let points = store::history(
@@ -814,7 +862,8 @@ async fn host_history(
     Ok(Json(HistoryResponse {
         host_id: id.to_string(),
         points,
-    }))
+    })
+    .into_response())
 }
 
 async fn update_remark(
@@ -876,7 +925,11 @@ mod tests {
             .unwrap();
         store::initialize_empty(&pool).await.unwrap();
         router(
-            AppState::new(pool, AdministratorOriginMode::LoopbackDevelopmentHttp),
+            AppState::new(
+                pool,
+                AdministratorOriginMode::LoopbackDevelopmentHttp,
+                crate::crypto::SecretBox::new([0x42; 32]),
+            ),
             test_static_dir(),
         )
         .unwrap()
@@ -893,7 +946,11 @@ mod tests {
             .await
             .unwrap();
         router(
-            AppState::new(pool, AdministratorOriginMode::LoopbackDevelopmentHttp),
+            AppState::new(
+                pool,
+                AdministratorOriginMode::LoopbackDevelopmentHttp,
+                crate::crypto::SecretBox::new([0x42; 32]),
+            ),
             test_static_dir(),
         )
         .unwrap()
@@ -1091,7 +1148,11 @@ mod tests {
             .unwrap();
         store::initialize_empty(&pool).await.unwrap();
         let app = router(
-            AppState::new(pool, AdministratorOriginMode::LoopbackDevelopmentHttp),
+            AppState::new(
+                pool,
+                AdministratorOriginMode::LoopbackDevelopmentHttp,
+                crate::crypto::SecretBox::new([0x42; 32]),
+            ),
             directory.path().to_owned(),
         )
         .unwrap();

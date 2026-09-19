@@ -97,9 +97,10 @@ tar --extract --gzip \
 
 | 字段 | 当前值或形状 |
 |---|---|
-| `manifest_format` | `host-monitoring-release-v1` |
+| `manifest_format` | `host-monitoring-release-v2` |
 | `application` | `host-monitoring` |
 | `version` | `0.9.14` |
+| `schema_application_version` | `0.9.14`，仅在数据库格式迁移时改变 |
 | `api_prefix` | `/api/v2` |
 | `schema_revision` | `6` |
 | `schema_sha256` | 64 位小写十六进制当前 Schema 摘要 |
@@ -373,11 +374,10 @@ Client credential、activation code、数据库或遥测正文。
 迁移、不修复，也不验证每个管理员内容。`degraded` 时保持流量隔离并调查。
 
 创建首个管理员使用 `admin-create --database-url ...`，从环境读取 bootstrap username/password。重置
-密码使用 `admin-reset-password --database-url ... --username ... --password ...`。两者需要 maintenance
+密码通过标准输入交给 `admin-reset-password --database-url ... --username ...`。两者需要 maintenance
 排他锁，必须先停服务。
 
-reset 的密码位于 argv，可能暴露给 Shell history 或同机进程列表。只能在受控维护终端使用临时秘密，
-完成后清理暴露面；当前没有 stdin/Secret provider 模式。
+reset 的密码只接受单行标准输入，不能写入命令参数；应在受控维护终端通过秘密管理器或不回显的临时变量提供。
 
 ### 12.4 容量与保留
 

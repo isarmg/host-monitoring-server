@@ -34,7 +34,7 @@
 | HOST-023 | `/api/v2/host-monitor` 唯一 Client/API 合同 | Server router、protocol crate、client | 核心 | 高 | Client 与 Server 无稳定交互；alias 会扩大攻击与测试面 | current path、其他 path 404、unknown field |
 | HOST-024 | Server ingest 严格验证和事务写入 | telemetry writer、SQLite | 核心 | 高 | 不可信 Client 数据可污染库或整批丢失 | size、单位、timestamp、rollback |
 | HOST-025 | 数据保留与有界清理 | retention config、maintenance task | 保障 | 中 | 数据库无限增长；删得过激则趋势数据消失 | 时间边界、批量、锁竞争 |
-| HOST-026 | 管理 API 提供 Host 分页列表、latest 详情和仍保留 raw 标量历史 | `http.rs::{list_hosts,host_detail,host_history}`、`store.rs::{list_hosts,get_host,history}` | 核心 | 高 | 采集虽仍落库，但管理员无法读取当前状态或 raw 历史 | 空集、1..1000 分页、from/to、乱序、权限；确认不混入 aggregate |
+| HOST-026 | 管理 API 提供实例/Host 分页、同快照 latest 详情、raw 原始历史及 raw/hourly 有界聚合历史 | `http.rs::{list_instances,list_hosts,host_detail,host_history}`、`store.rs::{list_invites,list_hosts,get_host,history,history_series}` | 核心 | 高 | 采集虽仍落库，但管理员无法读取当前状态或长期趋势 | 稳定分页、from/to、点数/跨度预算、raw/hourly 无重复、权限 |
 | HOST-027 | React/Vite 管理页：登录/恢复/登出、Host 列表与详情、实例邀请和配对激活 | `clients/web/src/App.tsx`、`api.ts`、Foundation admin hook/Vite/TS baseline | 建议保留 | 中 | API 保留，但仓库没有任何内置浏览器状态视图；删除不影响 Client 摄取 | 精确工具链、clean build、auth、Host list guard、退出清空；新增实例/配对见 `clients/web/tests/instances.mjs` 与 `live-instances.mjs`；不得据此宣称图表完整 |
 | HOST-028 | SQLite 当前 Schema identity/doctor | 产品文件预检/DDL/锁、`sarmg-sqlite`、`sarmg-schema-identity` | 保障 | 高 | 错库/漂移库可被误用 | wrong SHA/version、sidecar、corruption、连接 PRAGMA |
 | HOST-029 | Server 单实例和 maintenance lock | runtime lock、数据库锁 | 保障 | 高 | 双 Server 可重复清理/写入并破坏一致性 | 双启动、维护冲突 |
@@ -66,13 +66,13 @@
 | HOST-055 | 协议结构统一 `deny_unknown_fields` | `protocol/src/report.rs`、`pairing.rs` | 保障 | 中 | 拼错字段可能被当成功，双方合同悄然漂移 | 每一层 unknown field、缺字段、错误枚举 |
 | HOST-056 | 跨语言 `u64` 采用规范十进制字符串 | `protocol/src/json_u64.rs` | 核心 | 中 | JavaScript 超过 2^53 后丢精度，计数器和字节量错误 | 0、`u64::MAX`、前导零、符号、小数、溢出 |
 | HOST-057 | UUID 必须使用解析后重新格式化一致的小写连字符文本 | protocol DTO、`model.rs::canonical_uuid` | 保障 | 低 | 同一标识可有多种文本，唯一约束与日志关联失真 | 大写、无连字符、缺段、非十六进制；代码不额外限定 UUID version |
-| HOST-058 | 报告具有稳定 `report_id` 并由数据库全局唯一约束去重 | `ClientReport`、telemetry schema/writer | 保障 | 高 | at-least-once 重投会制造重复样本；若调用方用同 ID 改正文，当前 Server 仍按同 Host 重放处理 | 同 Host 重投、同 ID 改正文的既有语义、跨 Host 复用、ack identity |
+| HOST-058 | 报告以稳定 `report_id` 在 raw retention 窗口内由数据库全局唯一约束去重；窗口到期后不承诺永久 exactly-once | `ClientReport`、telemetry schema/writer、`retention.rs` | 保障 | 高 | 窗口内删除依据会让确认丢失后的重投重复聚合；无限期 tombstone 又会无界增长 | 同 Host 重投、跨 Host 复用、旧样本立即维护、窗口到期边界、ack identity |
 | HOST-059 | Server acknowledgement 回显 Host/report identity 且形状严格 | `ClientReportAck`、Client transport | 保障 | 中 | 代理缓存或错配响应可能误删错误 Spool 条目 | identity mismatch、缺 `accepted`、unknown field |
 | HOST-060 | HTTP 接收与 SQLite 写入由有界 telemetry queue 解耦 | `telemetry.rs`、`http.rs` | 保障 | 高 | 直接写库会让慢事务占住连接；无界队列会耗尽内存 | 队列满、入队超时、worker 停止、503/429 |
 | HOST-061 | Writer 使用有限 batch 与每报告 savepoint | `telemetry.rs` | 保障 | 高 | 单坏报告可能回滚整批；无限 batch 会形成长事务 | 中间一条失败、前后报告提交、事务时限 |
 | HOST-062 | Latest 状态只被明确更新规则推进 | telemetry SQL、latest query | 核心 | 高 | 迟到报告可能覆盖较新事实，控制台倒退 | 乱序、相同时间、重复报告 |
 | HOST-063 | Raw 与小时聚合采用 UTC 和幂等纳入 | `retention.rs`、聚合表 | 保障 | 高 | 崩溃重跑会双计或先删后丢；本地时区会遇到 DST 歧义 | 同小时重跑、崩溃点、UTC 边界 |
-| HOST-064 | Retention 分批、限时并主动 yield | `retention.rs` 配置与 worker | 保障 | 中 | 大清理事务会阻塞摄取；不清理则数据库无限增长 | 大量过期行、锁竞争、下一轮续作 |
+| HOST-064 | Retention 分批、限时并主动 yield；积压时短间隔续作、失败退避并接入 worker 健康 | `retention.rs` 配置与 worker、`main.rs` | 保障 | 中 | 大清理事务会阻塞摄取；固定慢周期会持续积压；静默失败无法被发现 | 大量过期行、锁竞争、预算耗尽续作、连续失败与恢复 |
 | HOST-065 | Readiness 同时检查数据库、保留结构与 writer 活性 | `http.rs::ready` | 开发运维 | 中 | 进程存活会被误当可接收遥测，负载均衡继续送入失败实例 | 关闭 writer、坏 schema、数据库不可用 |
 | HOST-066 | 新库只在目标文件不存在时创建，已有库只读预检 | `database_schema.rs`、`store.rs` | 保障 | 高 | 启动可能暗改未知数据库，违背 current-only | 空文件、未知表、非当前 metadata、byte snapshot |
 | HOST-067 | Schema identity 同时绑定 application/version/revision/SHA | `sarmg-schema-identity`、`database_schema.rs` | 保障 | 高 | 只看版本或只看 hash 都可能把错产品库当当前库 | 四字段逐项漂移、实际 schema 重算 |
@@ -114,7 +114,7 @@
 | HOST-103 | activation code 可由 Client 激活端点提交，或由已认证管理员端点提交；两者进入同一事务状态机 | `CLIENT_ACTIVATE_PATH`、`CLIENT_ADMIN_ACTIVATE_PATH`、`http.rs::activate` | 核心 | 高 | 激活路径删除后 pending 永远不能成为 Host；分叉实现会造成绑定差异 | code 错误/过期/重放、request/invite 一致、CSRF 管理端、幂等 active |
 | HOST-104 | 管理 API 可修改 Host 备注或永久删除 Host；当前是 last-write-wins，没有 revision/ETag 乐观并发 | `http.rs::{update_remark,delete_host}`、`store.rs` | 核心 | 高 | 删除备注更新只影响命名；删除 Host 删除会使凭据、报告、聚合、pairing/invite 一并丢失 | 404、255-byte 备注、CSRF、并发写覆盖语义、删除级联与 audit |
 | HOST-105 | invite create/cancel、激活、备注、删除五类动作在同一 SQLite 事务写 `audit_events`；当前没有 audit 读取/导出/保留 API | `schema.sql::audit_events`、`store.rs::{audit,create_invite,cancel_invite,activate,update_remark,delete_host}` | 保障 | 中 | 去掉写入会失去这些变更的本地责任证据；误宣称查询会造成合规预期落空 | 动作与业务事务同成败、管理员 actor=user_id、公开激活 actor=`client-capability`、确认路由表无 audit GET |
-| HOST-106 | 小时聚合只服务有界保留，当前 `host_history` 只读仍存在的 raw 标量，不合并 aggregate | `retention.rs`、`store.rs::history` | 核心 | 高 | 删除聚合会让长期趋势资产消失；把它写成已可查询会误导 API/UI 使用者 | raw 过期后 history 缺点、aggregate 表仍有数据、路由无 aggregate 查询 |
+| HOST-106 | 图表模式在同一只读快照中合并未归档 raw 与 hourly aggregate，按各指标有效样本数加权并返回实际粒度/来源 | `retention.rs`、`store.rs::history_series`、`http.rs::host_history` | 核心 | 高 | 简单相加会在归档过渡期重复计数；平均各小时均值会产生统计偏差 | raw/aggregate 共存、不同 count 加权、空值、边界对齐、最多 1000 点 |
 | HOST-107 | 路由分层 body 上限：登录 4 KiB、管理 API 16 KiB、Client 512 KiB | `login::LOGIN_BODY_LIMIT_BYTES`、`http.rs::router`、`CLIENT_REPORT_MAX_BODY_BYTES` | 保障 | 中 | 统一放大上限会扩大内存/解析攻击面；统一缩小会拒绝合法设备集合 | 上限±1、Content-Length/流式正文、413 Foundation envelope |
 | HOST-108 | 报告按 Host 使用 burst 64、16/s refill、有界 16384 entry/15 min TTL token bucket | `http.rs::ReportBuckets` | 保障 | 中 | 单 Host 可淹没 writer；无界 bucket map 可被 Host 标识耗尽内存 | burst/refill、TTL 清理、容量无可淘汰项、`Retry-After` |
 | HOST-109 | 开发/生产静态目录必须是绝对真实树且根仅有 `index.html`/`assets`；生产再限制 owner/mode/hardlink | `config.rs::validate_static_dir/validate_static_tree` | 保障 | 中 | ServeDir 可能暴露意外文件、链接目标或服务账户可改内容 | 相对路径、根多余项、symlink/special、depth 32、10000 entries、生产 owner/mode/nlink |
@@ -124,7 +124,7 @@
 | HOST-113 | 当前管理员 DDL 只有 `user_id/username/password_hash/active/created_at/session_version`，无 email/role；username UNIQUE + canonical CHECK，hash 非空，active 只能 0/1，session_version 必须大于 0 | `host-monitoring-server/schema.sql::auth_users`、`database_schema.rs` | 保障 | 高 | 加 alias/旧列会扩大存储与查询合同；删除 UNIQUE/CHECK 会让重复或非 canonical identity 绕过应用入口 | `pragma_table_info` exact 列、各 DDL CHECK 负例、唯一冲突、启动 Foundation 二次验证、Schema fingerprint |
 | HOST-114 | username/约束 DDL 已进入当前 Schema identity：revision 1、SHA `12dd1e61426b6b99df3d429b8c36ee3a5b22d1da776d98fc960b45b4f58c8e05` | `database_schema.rs::{SCHEMA_REVISION,SCHEMA_SHA256}`、`release.json` | 保障 | 高 | 常量/manifest/实际 DDL 任一漂移都会让新库初始化或发行验证失败 | 三处 identity 一致、现场 fingerprint、旧 email/无 CHECK DDL 拒绝 |
 | HOST-115 | React 登录表单使用 username text/`autocomplete=username`，默认显示 `admin`，认证后只展示 Session username 与 Host 列表 JSON | `clients/web/src/App.tsx` | 建议保留 | 低 | 改回 email input 会与 Foundation request guard 冲突；删除 username 显示只损失最小身份提示 | 表单 payload、canonical 正例、Session username、登出清空 Host |
-| HOST-116 | 管理员密码重置只提供排他维护 CLI，密码当前作为 `--password` argv；没有 stdin/file/Secret-provider 输入 | `config.rs::AdminResetPassword`、`main.rs::AdminResetPassword` | 开发运维 | 中 | 删除 reset 会失去受支持的当前改密入口；忽略 argv 暴露会把 Secret 留在 history/进程列表 | maintenance lock、history/argv 运维约束、错误 username、Session 全撤销 |
+| HOST-116 | 管理员密码重置只提供排他维护 CLI，密码从单行有界标准输入读取，不进入 argv | `config.rs::AdminResetPassword`、`main.rs::AdminResetPassword` | 开发运维 | 中 | 删除 reset 会失去受支持的当前改密入口 | maintenance lock、错误 username、Session 全撤销 |
 | HOST-117 | Server 本身监听 HTTP socket，生产浏览器安全依赖可信 TLS reverse proxy；生产 auth policy仍强制 HTTPS Origin 和 Secure `__Host-` Cookie | `config.rs::cookie_mode`、`auth.rs::{same_origin,session_cookie}`、systemd `BIND` | 保障 | 高 | 绕过 TLS 代理直出会使登录不可用或暴露其他非 Cookie 流量；把 Server 写成内置 TLS 会误配证书 | production HTTPS Origin、Secure Cookie、loopback development、非回环 development 拒绝 |
 | HOST-118 | Web/Server admin 范围与 Client 范围严格分离：Server+内置 Web 只随 AMD64 GNU/Linux release，Client 保留 Linux/Windows/macOS/mobile 合同 | `host-monitoring-server/build.rs`、`scripts/package-server-release.py`、`clients/web/`、Client CI matrix | 核心 | 中 | 把 Client 跨平台能力套到 Server 会产生未验证制品；把 Server 限制套到 Client 会误删现有平台 | Server 非目标拒绝、release target、Windows Client build、macOS/Android/iOS library checks |
 | HOST-119 | 遥测 retention 不清理控制面表：audit 无保留任务；过期/撤销 Session 行无全局删除任务；active/cancelled invite/pairing 多数长期保留，只有创建 pairing 时有界清理 expired pending/旧 denied | `retention.rs` 只操作 report/aggregate、`store.rs::create_pairing` cleanup SQL、`auth.rs` | 建议保留 | 高 | 直接删控制面历史会破坏责任/会话语义；完全忽略会导致长期数据库增长 | 大量登录/invite/pairing 的增长测试、password reset CSRF 清理、明确新增保留策略前的合规评审 |
@@ -142,7 +142,7 @@
 | 报告 API | `/api/v2/host-monitor` 当前协议 | 不注册任何平行版本或 alias |
 | API 错误 | Foundation `ErrorEnvelope`：`code/message/retryable/request_id?/details?` | 所有 `/api` 非 2xx（含 extractor/404/405）使用同一严格顶层结构 |
 | 写入 | 有界队列、单 writer、batch、savepoint | 单库单活进程，不是分布式写集群 |
-| 历史 | raw 标量历史查询、内部 UTC 小时聚合、两级保留 | 公开 history 只读 raw；聚合没有读 API，不是任意时序查询引擎 |
+| 历史 | raw 标量查询及 raw/hourly 自动粒度趋势、两级保留 | 图表查询最长 31 天、最多 1000 点；不是任意时序查询引擎 |
 | Web | Foundation 管理员 client/hook + Host 列表 exact guard，编译进发行物 | 当前提供主机列表、采集详情及实例邀请/配对；图表和 audit 等界面仍未补齐 |
 | 诊断 | health/readiness、doctor、事务内 audit 写入 | 不提供数据库修复或 audit 读取 API |
 | 发布 | source-bound binary、全树 manifest、固定目录 | 同版本不可原地覆盖 |
@@ -197,7 +197,7 @@ Token 是敏感数据。管理员操作和遥测不应记录 Secret。只有当�
 | 采集验证 | `probe` 读取当前平台指标 | 无网络参与 | 有界报告摘要与分类错误 |
 | 配对 | 保存 pending、轮询并原子提交 binding；Tray 可提交 code | invite/request/activation 事务与 credential 发放 | 浏览器创建/核对/激活、真实 Server 状态与 Client 协议轮询均有隔离验收；不替代真实设备采集 |
 | 日常报告 | 采集 -> spool -> HTTPS batch | 认证 -> queue -> writer -> commit | `once`/服务日志、latest 时间 |
-| 历史查询 | 无 | latest 详情和 raw 标量 history；内部 hourly aggregate 不公开 | 管理 API；当前 Web 只显示列表 JSON，无图表 |
+| 历史查询 | 无 | latest 完整详情、raw 原始 history、raw/hourly 聚合趋势 | 管理 Web 提供 15 分钟至 30 天范围和 CPU/内存均值曲线 |
 | 诊断 | `status`/`doctor`/delivery doctor | health/readiness/doctor | 机器可读结果、request/report ID |
 | 外部转换 | 产品不执行 | 仅在外部仓存在明确支持边时离线转换 | 外部 verify + product doctor |
 
@@ -294,8 +294,7 @@ Token 是敏感数据。管理员操作和遥测不应记录 Secret。只有当�
 | 移动常驻 daemon | 不提供 | 不符合 Android/iOS 后台模型 |
 | 多版本 Client API alias | 不提供 | 扩大协议和安全测试矩阵 |
 | 自动硬件告警规则 | 当前不提供 | 需明确规则状态、抑制、通知和时钟语义 |
-| 完整 Web 管理台 | 当前不提供 | 现有 React 仅认证和 Host 列表 JSON；需补 invite/activation、详情/history、备注/删除和负例 |
-| 小时聚合查询 | 当前不提供 | 表中有聚合不等于 API 可读；需定义分页、raw/aggregate 拼接与时间精度 |
+| 通用审计管理台 | 当前不提供 | 当前 React 已覆盖实例分页、配对、完整最新详情、自动更新、趋势、备注和删除；审计查询仍需单独合同 |
 | audit 查询/导出 | 当前不提供 | 只有事务写入；需定义授权、保留、脱敏、分页与完整性证据 |
 | 同 ID 正文 fingerprint | 当前不提供 | 现在同 Host 同 report ID 不比较正文；若要检测错误重放，需新增规范编码/hash、列和冲突合同 |
 

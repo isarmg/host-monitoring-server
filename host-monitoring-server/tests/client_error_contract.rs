@@ -40,6 +40,7 @@ async fn fixture() -> Fixture {
         pool.clone(),
         sarmg_admin_auth::AdministratorOriginMode::LoopbackDevelopmentHttp,
         TelemetryWriterConfig::production(),
+        host_monitoring_server::crypto::SecretBox::new([0x42; 32]),
     );
     Fixture {
         app: router(state, PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("web"))

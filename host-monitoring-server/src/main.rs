@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use clap::Parser;
 use host_monitoring_server::{
     config::{Cli, Command},
@@ -45,7 +46,8 @@ async fn main() -> anyhow::Result<()> {
             let maintenance = MaintenanceLock::exclusive(&args.database_url)?;
             let pool = store::open_existing(&maintenance.database_url()).await?;
             let username = store::normalize_username(&args.username)?;
-            store::reset_admin_password(&pool, &username, &args.password).await?;
+            let password = read_password_from_stdin()?;
+            store::reset_admin_password(&pool, &username, &password).await?;
             println!(
                 "{{\"status\":\"password-reset\",\"username\":{:?}}}",
                 username
@@ -141,7 +143,8 @@ async fn serve(release_root: Option<&std::path::Path>) -> anyhow::Result<()> {
     .await?;
     let secrets = host_monitoring_server::crypto::SecretBox::new(config.client_authorization_key);
     store::validate_invite_authorizations(&pool, &secrets).await?;
-    let (_, retention_maintenance) = RetentionMaintenance::start(pool.clone(), config.retention);
+    let (retention_status, retention_maintenance) =
+        RetentionMaintenance::start(pool.clone(), config.retention);
     let (telemetry, telemetry_writer) = TelemetryWriter::start(pool.clone(), config.telemetry);
     let health_pool = pool.clone();
     let retention_pool = pool.clone();
@@ -159,6 +162,13 @@ async fn serve(release_root: Option<&std::path::Path>) -> anyhow::Result<()> {
             sarmg_server_runtime::health_check(move || {
                 let pool = retention_pool.clone();
                 async move { store::retention_ready(&pool).await }
+            }),
+        )
+        .register_health_check(
+            "retention-worker",
+            sarmg_server_runtime::health_check(move || {
+                let status = retention_status.clone();
+                async move { status.is_healthy() }
             }),
         )
         .register_background_task(
@@ -179,11 +189,36 @@ async fn serve(release_root: Option<&std::path::Path>) -> anyhow::Result<()> {
         config.administrator_origin,
         telemetry,
         runtime_handle.clone(),
-    )
-    .with_secrets(secrets);
+        secrets,
+    );
     tracing::info!(bind=%config.bind, "host-monitoring server ready");
     runtime
         .serve(transport, router(state, config.static_dir)?)
         .await?;
     Ok(())
+}
+
+fn read_password_from_stdin() -> anyhow::Result<String> {
+    use std::io::Read as _;
+
+    let mut bytes = Vec::new();
+    std::io::stdin()
+        .take(4097)
+        .read_to_end(&mut bytes)
+        .context("read administrator password from standard input")?;
+    anyhow::ensure!(
+        bytes.len() <= 4096,
+        "administrator password input is too large"
+    );
+    if bytes.last() == Some(&b'\n') {
+        bytes.pop();
+        if bytes.last() == Some(&b'\r') {
+            bytes.pop();
+        }
+    }
+    anyhow::ensure!(
+        !bytes.contains(&b'\n') && !bytes.contains(&b'\r'),
+        "administrator password must be one line"
+    );
+    String::from_utf8(bytes).context("administrator password must be UTF-8")
 }

@@ -31,8 +31,8 @@ npm run build
 2. `status` 验证本地状态与配对。
 3. `once` 验证 spool 和主投递。
 4. Server readiness/日志验证准入与 writer。
-5. 数据库/API 验证 latest/raw；不要期待 history 自动读取 aggregate。
-6. Web 只验证 Session 和 Host 列表 JSON；详情、图表、pairing 与管理变更 UI 尚不存在。
+5. 数据库/API 验证 latest、raw 及 `resolution=auto` 的 raw/hourly 合并结果。
+6. Web 验证 Session、实例分页、配对、自动更新、完整最新详情、趋势和管理变更。
 
 每次只跨一层，避免用“重装一切”掩盖原因。
 

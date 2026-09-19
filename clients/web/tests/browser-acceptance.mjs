@@ -38,15 +38,31 @@ try {
       const page = await context.newPage();
       const errors = [];
       const requested = [];
+      const instanceRequested = [];
       page.on("pageerror", error => errors.push(error.message));
       await page.route("**/api/v2/**", route => {
         const url = new URL(route.request().url());
         const offset = Number(url.searchParams.get("offset") ?? "0");
         const isHosts = url.pathname.endsWith("/monitoring/hosts");
         if (isHosts) requested.push(offset);
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(isHosts
-          ? { hosts: Array.from({ length: 51 }, (_, index) => host(index)), total: 51, limit: 1000, offset }
-          : url.pathname.endsWith("/client-instances") ? Array.from({ length: 51 }, (_, index) => instance(index)) : session) });
+        const detailMatch = /\/monitoring\/hosts\/([0-9a-f-]+)$/.exec(url.pathname);
+        const historyMatch = /\/monitoring\/hosts\/([0-9a-f-]+)\/history$/.exec(url.pathname);
+        let body;
+        if (isHosts) {
+          body = { hosts: Array.from({ length: 51 }, (_, index) => host(index)), total: 51, limit: 1000, offset };
+        } else if (url.pathname.endsWith("/client-instances")) {
+          instanceRequested.push(offset);
+          const indexes = Array.from({ length: Math.min(50, 51 - offset) }, (_, index) => offset + index);
+          body = { instances: indexes.map(instance), hosts: indexes.map(host), total: 51, limit: 50, offset };
+        } else if (historyMatch) {
+          body = { host_id: historyMatch[1], requested_from: "2026-09-03T23:00:00Z", requested_to: "2026-09-04T00:00:00Z",
+            actual_from: "2026-09-03T23:00:00Z", actual_to: "2026-09-04T00:00:00Z", step_seconds: 5, source: "raw", points: [] };
+        } else if (detailMatch) {
+          body = { host: host(50), latest: null };
+        } else {
+          body = session;
+        }
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       });
       await page.goto(`http://127.0.0.1:${address.port}`);
       await page.getByRole("button", { name: "选择实例 Host-0", exact: true }).waitFor();
@@ -68,28 +84,35 @@ try {
       await expect(page.getByRole("button", { name: "实例列表", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
       const table = page.getByRole("table", { name: "实例列表" });
-      await expect(table.locator("tbody tr")).toHaveCount(51);
+      await expect(table.locator("tbody tr")).toHaveCount(50);
       assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["名称", "配对状态", "在线状态", "系统 / 架构", "授权码", "操作"]);
       const cells = table.locator("tbody tr").first().locator("td");
-      assert.deepEqual((await cells.allTextContents()).slice(0, 4), ["已配对", "在线", "linux / x86_64", "uci_00000000000000000000000000000000"]);
+      assert.deepEqual((await cells.allTextContents()).slice(0, 3), ["已配对", "在线", "linux / x86_64"]);
+      await expect(cells.nth(3).locator("code")).toHaveText("uci_00000000000000000000000000000000");
+      await expect(cells.nth(3).getByRole("button", { name: "复制", exact: true })).toBeVisible();
       assert.equal(await table.locator("tbody tr").first().evaluate(row => getComputedStyle(row).display), "table-row");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
       assert.equal(await page.getByRole("complementary").count(), 0);
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
+      await page.getByRole("button", { name: "下一页", exact: true }).click();
+      await expect(table.locator("tbody tr")).toHaveCount(1);
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).click();
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.deepEqual([...new Set(requested)], [0]);
-      await page.getByText("完整采集信息").click();
-      assert.equal(await page.getByText("client_version", { exact: true }).count(), 0);
-      await page.getByText("注册时间", { exact: true }).waitFor();
+      assert.deepEqual([...new Set(instanceRequested)], [0, 50]);
+      await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
+      await page.getByText("等待首次上报", { exact: true }).waitFor();
+      await page.getByRole("heading", { name: "历史趋势", exact: true }).waitFor();
+      await page.getByText("页面最近更新", { exact: true }).waitFor();
       for (const theme of ["light", "dark"]) {
         if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /切换到.*模式/ }).click();
         const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
         assert.deepEqual(result.violations, []);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       }
-      await checkWebLanguage(page, {"routes":[["instances","Instance list"],["details","Details"],["logs","Logs"]],"names":["验收主机","测试主机"]});
+      const selectedId = host(50).id;
+      await checkWebLanguage(page, {"routes":[["instances","Instance list"],[`details/${selectedId}`,"Details"],[`logs/${selectedId}`,"Logs"]],"names":["验收主机","测试主机"]});
       await checkHeaderLogout(page, session.csrf_token);
       assert.deepEqual(errors, []);
       console.log(`${engine.name()}: current Host build, pagination, full details and mobile light/dark WCAG AA passed`);

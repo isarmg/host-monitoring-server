@@ -2,9 +2,11 @@ use anyhow::Context;
 use sarmg_server_target::SERVER_TARGET_TRIPLE;
 use serde::{Deserialize, Serialize};
 
-use crate::database_schema::{APPLICATION, APPLICATION_VERSION, SCHEMA_REVISION, SCHEMA_SHA256};
+use crate::database_schema::{
+    APPLICATION, APPLICATION_VERSION, SCHEMA_APPLICATION_VERSION, SCHEMA_REVISION, SCHEMA_SHA256,
+};
 
-pub const RELEASE_MANIFEST_FORMAT: &str = "host-monitoring-release-v1";
+pub const RELEASE_MANIFEST_FORMAT: &str = "host-monitoring-release-v2";
 pub const SUPPORTED_SERVER_TARGET: &str = SERVER_TARGET_TRIPLE;
 pub const BUILD_TARGET: &str = env!("HOST_MONITORING_BUILD_TARGET");
 pub const SOURCE_REVISION: &str = env!("HOST_MONITORING_SOURCE_REVISION");
@@ -40,6 +42,7 @@ pub struct ReleaseContract {
     pub manifest_format: String,
     pub application: String,
     pub version: String,
+    pub schema_application_version: String,
     pub api_prefix: String,
     pub schema_revision: i64,
     pub schema_sha256: String,
@@ -52,6 +55,7 @@ pub struct BinaryIdentity {
     pub manifest_format: String,
     pub application: String,
     pub version: String,
+    pub schema_application_version: String,
     pub api_prefix: String,
     pub schema_revision: i64,
     pub schema_sha256: String,
@@ -65,6 +69,7 @@ impl ReleaseContract {
             manifest_format: RELEASE_MANIFEST_FORMAT.to_owned(),
             application: APPLICATION.to_owned(),
             version: APPLICATION_VERSION.to_owned(),
+            schema_application_version: SCHEMA_APPLICATION_VERSION.to_owned(),
             api_prefix: host_protocol::API_PREFIX.to_owned(),
             schema_revision: SCHEMA_REVISION,
             schema_sha256: SCHEMA_SHA256.to_owned(),
@@ -80,6 +85,7 @@ impl BinaryIdentity {
             manifest_format: contract.manifest_format,
             application: contract.application,
             version: contract.version,
+            schema_application_version: contract.schema_application_version,
             api_prefix: contract.api_prefix,
             schema_revision: contract.schema_revision,
             schema_sha256: contract.schema_sha256,

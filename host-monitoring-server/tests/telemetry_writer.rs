@@ -160,6 +160,7 @@ fn application(pool: SqlitePool, writer: TelemetryWriter) -> Router {
             pool,
             sarmg_admin_auth::AdministratorOriginMode::LoopbackDevelopmentHttp,
             writer,
+            host_monitoring_server::crypto::SecretBox::new([0x42; 32]),
         ),
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("web"),
     )

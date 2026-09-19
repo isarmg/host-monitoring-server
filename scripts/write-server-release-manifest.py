@@ -17,7 +17,8 @@ from typing import NoReturn
 APPLICATION = "host-monitoring"
 VERSION = "0.9.14"
 TARGET = "x86_64-unknown-linux-gnu"
-CONTRACT_FORMAT = "host-monitoring-release-v1"
+CONTRACT_FORMAT = "host-monitoring-release-v2"
+SCHEMA_APPLICATION_VERSION = "0.9.14"
 MANIFEST_FORMAT = "host-monitoring-files-v1"
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
 MAX_ENTRIES = 10_000
@@ -27,6 +28,7 @@ IDENTITY_KEYS = {
     "manifest_format",
     "application",
     "version",
+    "schema_application_version",
     "api_prefix",
     "schema_revision",
     "schema_sha256",
@@ -78,6 +80,7 @@ def read_identity(binary: Path) -> tuple[dict[str, object], bytes]:
         identity["manifest_format"] != CONTRACT_FORMAT
         or identity["application"] != APPLICATION
         or identity["version"] != VERSION
+        or identity["schema_application_version"] != SCHEMA_APPLICATION_VERSION
         or identity["api_prefix"] != "/api/v2"
         or identity["schema_revision"] != 6
         or identity["target"] != TARGET

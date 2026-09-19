@@ -1,7 +1,7 @@
 // Loopback-only development service; all credentials/state stay in ignored .runtime.
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
@@ -11,6 +11,12 @@ const runtime = join(root, ".runtime", "local-service");
 const binary = join(root, "target/debug/host-monitoring-server");
 const recordPath = join(runtime, "process.json");
 const address = "http://127.0.0.1:18105";
+
+function validAuthorizationKey(value) {
+  if (typeof value !== "string") return false;
+  const decoded = Buffer.from(value, "base64");
+  return decoded.length === 32 && decoded.toString("base64") === value;
+}
 
 function privateDirectory(path) {
   mkdirSync(path, { mode: 0o700, recursive: true });
@@ -69,21 +75,36 @@ if (command === "stop") {
   await new Promise(done => listener.close(done));
   privateDirectory(join(runtime, "db"));
   const secretsPath = join(runtime, "credentials.json");
+  const databasePath = join(runtime, "db", "host-monitoring.sqlite3");
   let credentials;
-  try { credentials = readPrivate(secretsPath); }
+  try {
+    credentials = readPrivate(secretsPath);
+    if (!validAuthorizationKey(credentials.clientAuthorizationKey)) {
+      if (existsSync(databasePath)) {
+        throw new Error("Local credentials are missing the valid client authorization key for the existing database; restore the original key before starting");
+      }
+      credentials.clientAuthorizationKey = randomBytes(32).toString("base64");
+      writeFileSync(secretsPath, JSON.stringify(credentials) + "\n", { mode: 0o600 });
+    }
+  }
   catch (error) {
     if (error.code !== "ENOENT") throw error;
-    credentials = { username: "admin", password: randomBytes(24).toString("base64url") };
+    credentials = {
+      username: "admin",
+      password: randomBytes(24).toString("base64url"),
+      clientAuthorizationKey: randomBytes(32).toString("base64"),
+    };
     writeFileSync(secretsPath, JSON.stringify(credentials) + "\n", { mode: 0o600, flag: "wx" });
     writeFileSync(join(runtime, "login.txt"), `URL: ${address}\nUsername: ${credentials.username}\nPassword: ${credentials.password}\n`, { mode: 0o600, flag: "wx" });
   }
   const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("HOST_MONITORING_")));
   Object.assign(env, {
     HOST_MONITORING_BIND: "127.0.0.1:18105", HOST_MONITORING_DEVELOPMENT: "true",
-    HOST_MONITORING_DATABASE_URL: `sqlite://${runtime}/db/host-monitoring.sqlite3`,
+    HOST_MONITORING_DATABASE_URL: `sqlite://${databasePath}`,
     HOST_MONITORING_STATIC_DIR: join(root, "clients/web/dist"),
     HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME: credentials.username,
     HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD: credentials.password,
+    HOST_MONITORING_CLIENT_AUTHORIZATION_KEY: credentials.clientAuthorizationKey,
     RUST_LOG: "info",
   });
   const logPath = join(runtime, "server.log");

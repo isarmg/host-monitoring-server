@@ -8,9 +8,21 @@ use uuid::Uuid;
 
 pub use crate::database_schema::{initialize_empty, open_existing, open_or_initialize};
 use crate::model::{
-    ClientInstanceSummary, ClientPairingPublicSummary, HistoryPoint, HostSummary, MetricSummary,
-    host_status,
+    ClientInstanceSummary, ClientPairingPublicSummary, HistoryBucket, HistoryPoint,
+    HistorySeriesResponse, HostSummary, MetricAggregate, MetricSummary, host_status,
 };
+
+const HISTORY_METRICS: [&str; 9] = [
+    "cpu_usage_percent",
+    "memory_usage_percent",
+    "network_received_bytes_per_second",
+    "network_transmitted_bytes_per_second",
+    "disk_read_bytes_per_second",
+    "disk_written_bytes_per_second",
+    "max_temperature_celsius",
+    "gpu_utilization_percent",
+    "gpu_memory_usage_percent",
+];
 
 pub async fn ready(pool: &SqlitePool) -> bool {
     crate::database_schema::is_current(pool).await
@@ -151,17 +163,45 @@ pub async fn create_invite(
 pub async fn list_invites(
     pool: &SqlitePool,
     secrets: &crate::crypto::SecretBox,
-) -> anyhow::Result<Vec<ClientInstanceSummary>> {
+    limit: i64,
+    offset: i64,
+) -> anyhow::Result<(Vec<ClientInstanceSummary>, Vec<HostSummary>, i64)> {
+    let mut tx = pool.begin().await?;
+    let total = sqlx::query_scalar("SELECT count(*) FROM client_instance_invites")
+        .fetch_one(&mut *tx)
+        .await?;
     let rows = sqlx::query(
         r#"SELECT invite_id,instance_id,display_name,created_at,status,authorization_code_enc
            FROM client_instance_invites
-           ORDER BY created_at DESC LIMIT 200"#,
+           ORDER BY created_at DESC,invite_id DESC LIMIT ? OFFSET ?"#,
     )
-    .fetch_all(pool)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *tx)
     .await?;
-    rows.iter()
+    let instances = rows
+        .iter()
         .map(|row| client_instance(row, secrets))
-        .collect()
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let mut hosts = Vec::new();
+    if !instances.is_empty() {
+        let mut query = sqlx::QueryBuilder::<Sqlite>::new(HOST_SELECT);
+        query.push(" WHERE h.lifecycle_status='active' AND h.host_id IN (");
+        let mut ids = query.separated(",");
+        for instance in &instances {
+            ids.push_bind(Uuid::parse_str(&instance.instance_id)?);
+        }
+        ids.push_unseparated(") ORDER BY h.registered_at,h.host_id");
+        hosts = query
+            .build_query_as::<HostRow>()
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .map(summarize)
+            .collect();
+    }
+    tx.commit().await?;
+    Ok((instances, hosts, total))
 }
 
 pub async fn validate_invite_authorizations(
@@ -239,15 +279,16 @@ pub async fn rotate_invite_authorization(
         actor,
     )
     .await?;
-    tx.commit().await?;
     let row = sqlx::query(
         "SELECT invite_id,instance_id,display_name,created_at,status,authorization_code_enc \
          FROM client_instance_invites WHERE invite_id = ?",
     )
     .bind(invite_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
-    Ok(Some(client_instance(&row, secrets)?))
+    let instance = client_instance(&row, secrets)?;
+    tx.commit().await?;
+    Ok(Some(instance))
 }
 
 pub enum CancelInviteResult {
@@ -262,7 +303,7 @@ pub async fn cancel_invite(
     invite_id: Uuid,
     actor: &str,
 ) -> anyhow::Result<CancelInviteResult> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let row =
         sqlx::query("SELECT status,instance_id FROM client_instance_invites WHERE invite_id=?")
             .bind(invite_id)
@@ -275,8 +316,6 @@ pub async fn cancel_invite(
     let status = row.try_get::<String, _>("status")?;
     let instance_id: Uuid = row.try_get("instance_id")?;
     if status == "cancelled" {
-        sqlx::query("DELETE FROM client_pairing_requests WHERE invite_id=? OR (requested_host_id=? AND status IN ('pending','denied'))")
-            .bind(invite_id).bind(instance_id).execute(&mut *tx).await?;
         audit(
             &mut tx,
             "monitoring.client_instance.invite.delete",
@@ -285,10 +324,7 @@ pub async fn cancel_invite(
             actor,
         )
         .await?;
-        sqlx::query("DELETE FROM client_instance_invites WHERE invite_id=?")
-            .bind(invite_id)
-            .execute(&mut *tx)
-            .await?;
+        delete_host_records(&mut tx, instance_id).await?;
         tx.commit().await?;
         return Ok(CancelInviteResult::Deleted);
     }
@@ -350,7 +386,7 @@ pub async fn create_pairing(
     request: &ClientPairingRequest,
 ) -> anyhow::Result<CreatePairingResult> {
     const MAX_PENDING: i64 = 4096;
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     // Serialize identical polling secrets without locking the whole table.
     // SQLite serializes writes with its database lock; no advisory lock is needed.
     let existing = sqlx::query(
@@ -512,7 +548,7 @@ pub async fn activate(
     activation_hash: &str,
     actor: &str,
 ) -> anyhow::Result<ActivateResult> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let pairing = sqlx::query(
         "SELECT request_id,requested_host_id,pairing_mode,os,os_version,kernel_version,arch,client_version,token_hash,status,invite_id,instance_id,expires_at \
          FROM client_pairing_requests WHERE request_id=?",
@@ -908,9 +944,10 @@ pub async fn list_hosts(
     limit: i64,
     offset: i64,
 ) -> anyhow::Result<(Vec<HostSummary>, i64)> {
+    let mut tx = pool.begin().await?;
     let total: i64 =
         sqlx::query_scalar("SELECT count(*) FROM monitored_hosts WHERE lifecycle_status='active'")
-            .fetch_one(pool)
+            .fetch_one(&mut *tx)
             .await?;
     let sql = format!(
         "{HOST_SELECT} WHERE h.lifecycle_status='active' ORDER BY h.registered_at,h.host_id LIMIT ? OFFSET ?"
@@ -918,8 +955,9 @@ pub async fn list_hosts(
     let rows: Vec<HostRow> = sqlx::query_as(&sql)
         .bind(limit)
         .bind(offset)
-        .fetch_all(pool)
+        .fetch_all(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok((rows.into_iter().map(summarize).collect(), total))
 }
 
@@ -927,17 +965,20 @@ pub async fn get_host(
     pool: &SqlitePool,
     host_id: Uuid,
 ) -> anyhow::Result<Option<(HostSummary, Option<ClientReport>)>> {
+    let mut tx = pool.begin().await?;
     let sql = format!("{HOST_SELECT} WHERE h.host_id=? AND h.lifecycle_status='active'");
     let row: Option<HostRow> = sqlx::query_as(&sql)
         .bind(host_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?;
     let Some(row) = row else {
+        tx.commit().await?;
         return Ok(None);
     };
     let payload: Option<Json<ClientReport>> = sqlx::query_scalar(
         "SELECT r.payload FROM monitored_hosts h LEFT JOIN client_metric_reports r ON r.report_id=h.latest_report_id WHERE h.host_id=?",
-    ).bind(host_id).fetch_one(pool).await?;
+    ).bind(host_id).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
     Ok(Some((summarize(row), payload.map(|json| json.0))))
 }
 
@@ -1005,13 +1046,155 @@ pub async fn history(
     Ok(Some(points))
 }
 
+pub async fn history_series(
+    pool: &SqlitePool,
+    host_id: Uuid,
+    requested_from: DateTime<Utc>,
+    requested_to: DateTime<Utc>,
+    max_points: i64,
+) -> anyhow::Result<Option<HistorySeriesResponse>> {
+    let mut tx = pool.begin().await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM monitored_hosts WHERE host_id=? AND lifecycle_status='active')",
+    )
+    .bind(host_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        tx.commit().await?;
+        return Ok(None);
+    }
+    let has_hourly: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM client_metric_hourly_aggregates WHERE host_id=? AND interval_end>=? AND interval_start<=?)",
+    )
+    .bind(host_id)
+    .bind(requested_from)
+    .bind(requested_to)
+    .fetch_one(&mut *tx)
+    .await?;
+    let has_raw: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM client_metric_reports WHERE host_id=? AND aggregated_at IS NULL AND collected_at>=? AND collected_at<=?)",
+    )
+    .bind(host_id)
+    .bind(requested_from)
+    .bind(requested_to)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let span = (requested_to - requested_from).num_seconds().max(1);
+    let minimum_step = ((span + max_points - 1) / max_points).max(1);
+    let mut step = [1, 2, 5, 10, 30, 60, 120, 300, 900, 3600, 21_600, 86_400]
+        .into_iter()
+        .find(|candidate| *candidate >= minimum_step)
+        .unwrap_or(86_400);
+    if has_hourly {
+        step = step.max(3600);
+    }
+    let (from_epoch, to_epoch) = loop {
+        let from_epoch = requested_from.timestamp().div_euclid(step) * step;
+        let to_epoch = ((requested_to.timestamp() + step - 1).div_euclid(step)) * step;
+        if (to_epoch - from_epoch) / step <= max_points {
+            break (from_epoch, to_epoch);
+        }
+        step = [2, 5, 10, 30, 60, 120, 300, 900, 3600, 21_600, 86_400]
+            .into_iter()
+            .find(|candidate| *candidate > step)
+            .unwrap_or(86_400);
+    };
+    let actual_from = DateTime::from_timestamp(from_epoch, 0)
+        .ok_or_else(|| anyhow::anyhow!("history start is outside the supported range"))?;
+    let actual_to = DateTime::from_timestamp(to_epoch, 0)
+        .ok_or_else(|| anyhow::anyhow!("history end is outside the supported range"))?;
+
+    let mut raw_metrics = String::new();
+    let mut hourly_metrics = String::new();
+    let mut grouped_metrics = String::new();
+    for metric in HISTORY_METRICS {
+        raw_metrics.push_str(&format!(
+            ",CASE WHEN {metric} IS NULL THEN 0 ELSE 1 END AS {metric}_count,{metric} AS {metric}_min,{metric} AS {metric}_max,{metric} AS {metric}_avg"
+        ));
+        hourly_metrics.push_str(&format!(
+            ",{metric}_count,{metric}_min,{metric}_max,{metric}_avg"
+        ));
+        grouped_metrics.push_str(&format!(
+            ",SUM({metric}_count) AS {metric}_count,MIN(CASE WHEN {metric}_count>0 THEN {metric}_min END) AS {metric}_min,MAX(CASE WHEN {metric}_count>0 THEN {metric}_max END) AS {metric}_max,CASE WHEN SUM({metric}_count)=0 THEN NULL ELSE SUM({metric}_avg*{metric}_count)/SUM({metric}_count) END AS {metric}_avg"
+        ));
+    }
+    let sql = format!(
+        "WITH source AS (\
+           SELECT unixepoch(collected_at) AS start_epoch,unixepoch(collected_at) AS end_epoch,1 AS sample_count{raw_metrics} \
+             FROM client_metric_reports WHERE host_id=? AND aggregated_at IS NULL AND collected_at>=? AND collected_at<? \
+           UNION ALL \
+           SELECT unixepoch(interval_start),unixepoch(interval_end),sample_count{hourly_metrics} \
+             FROM client_metric_hourly_aggregates WHERE host_id=? AND bucket_start>=? AND bucket_start<?\
+         ) SELECT (start_epoch/?)*? AS bucket_epoch,MIN(start_epoch) AS interval_start_epoch,MAX(end_epoch) AS interval_end_epoch,SUM(sample_count) AS sample_count{grouped_metrics} \
+           FROM source GROUP BY bucket_epoch ORDER BY bucket_epoch LIMIT ?"
+    );
+    let rows = sqlx::query(&sql)
+        .bind(host_id)
+        .bind(actual_from)
+        .bind(actual_to)
+        .bind(host_id)
+        .bind(actual_from)
+        .bind(actual_to)
+        .bind(step)
+        .bind(step)
+        .bind(max_points)
+        .fetch_all(&mut *tx)
+        .await?;
+    let mut points = Vec::with_capacity(rows.len());
+    for row in rows {
+        let metric = |name: &str| -> anyhow::Result<MetricAggregate> {
+            Ok(MetricAggregate {
+                count: row.try_get(format!("{name}_count").as_str())?,
+                min: row.try_get(format!("{name}_min").as_str())?,
+                max: row.try_get(format!("{name}_max").as_str())?,
+                avg: row.try_get(format!("{name}_avg").as_str())?,
+            })
+        };
+        let bucket_epoch: i64 = row.try_get("bucket_epoch")?;
+        points.push(HistoryBucket {
+            start: DateTime::from_timestamp(bucket_epoch, 0)
+                .ok_or_else(|| anyhow::anyhow!("invalid history bucket timestamp"))?,
+            end: DateTime::from_timestamp(bucket_epoch + step, 0)
+                .ok_or_else(|| anyhow::anyhow!("invalid history bucket end timestamp"))?,
+            sample_count: row.try_get("sample_count")?,
+            cpu_usage_percent: metric("cpu_usage_percent")?,
+            memory_usage_percent: metric("memory_usage_percent")?,
+            network_received_bytes_per_second: metric("network_received_bytes_per_second")?,
+            network_transmitted_bytes_per_second: metric("network_transmitted_bytes_per_second")?,
+            disk_read_bytes_per_second: metric("disk_read_bytes_per_second")?,
+            disk_written_bytes_per_second: metric("disk_written_bytes_per_second")?,
+            max_temperature_celsius: metric("max_temperature_celsius")?,
+            gpu_utilization_percent: metric("gpu_utilization_percent")?,
+            gpu_memory_usage_percent: metric("gpu_memory_usage_percent")?,
+        });
+    }
+    tx.commit().await?;
+    Ok(Some(HistorySeriesResponse {
+        host_id: host_id.to_string(),
+        requested_from,
+        requested_to,
+        actual_from,
+        actual_to,
+        step_seconds: step,
+        source: match (has_raw, has_hourly) {
+            (true, true) => "mixed",
+            (false, true) => "hourly",
+            _ => "raw",
+        }
+        .to_owned(),
+        points,
+    }))
+}
+
 pub async fn update_remark(
     pool: &SqlitePool,
     host_id: Uuid,
     remark: &str,
     actor: &str,
 ) -> anyhow::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let changed = sqlx::query("UPDATE monitored_hosts SET name=? WHERE host_id=?")
         .bind(remark)
         .bind(host_id)
@@ -1020,6 +1203,11 @@ pub async fn update_remark(
         .rows_affected()
         == 1;
     if changed {
+        sqlx::query("UPDATE client_instance_invites SET display_name=? WHERE instance_id=?")
+            .bind(remark)
+            .bind(host_id)
+            .execute(&mut *tx)
+            .await?;
         audit(
             &mut tx,
             "monitoring.instance.remark.update",
@@ -1036,7 +1224,7 @@ pub async fn update_remark(
 }
 
 pub async fn delete_host(pool: &SqlitePool, host_id: Uuid, actor: &str) -> anyhow::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM monitored_hosts WHERE host_id=?)")
             .bind(host_id)
@@ -1054,16 +1242,27 @@ pub async fn delete_host(pool: &SqlitePool, host_id: Uuid, actor: &str) -> anyho
         actor,
     )
     .await?;
-    sqlx::query("DELETE FROM client_pairing_requests WHERE instance_id=? OR (requested_host_id=? AND status IN ('pending','denied'))")
-        .bind(host_id).bind(host_id).execute(&mut *tx).await?;
+    delete_host_records(&mut tx, host_id).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+async fn delete_host_records(
+    tx: &mut Transaction<'_, Sqlite>,
+    host_id: Uuid,
+) -> anyhow::Result<()> {
+    sqlx::query("DELETE FROM client_pairing_requests WHERE instance_id=? OR requested_host_id=?")
+        .bind(host_id)
+        .bind(host_id)
+        .execute(&mut **tx)
+        .await?;
     sqlx::query("DELETE FROM client_instance_invites WHERE instance_id=?")
         .bind(host_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     sqlx::query("DELETE FROM monitored_hosts WHERE host_id=?")
         .bind(host_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-    tx.commit().await?;
-    Ok(true)
+    Ok(())
 }

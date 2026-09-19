@@ -3,7 +3,7 @@
 ## 7.1 协议层次
 
 配对协议建立设备身份；报告协议提交遥测；管理员 API 查询 Host summary、latest payload 和仍保留的 raw
-标量 history。内部 aggregate 表目前没有查询路由。公开/管理员/设备三类路由的身份、速率和数据暴露
+标量 history；图表模式还可无重复合并 raw 与 hourly aggregate，并返回粒度和来源。公开/管理员/设备三类路由的身份、速率和数据暴露
 不同，不能共用一个“万能 token”。
 
 ## 7.2 报告不变量

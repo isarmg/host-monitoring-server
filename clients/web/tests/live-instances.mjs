@@ -29,9 +29,9 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByRole("button", { name: "新建实例", exact: true }).click();
     await page.getByRole("dialog", { name: "新建 客户端 实例" }).getByLabel("实例名称", { exact: true }).fill("真实后端测试主机");
     await page.getByRole("button", { name: "创建实例", exact: true }).click();
-    const code = await page.getByLabel("配对码").inputValue();
+    await expect(page.getByRole("dialog", { name: "新建 客户端 实例" })).toHaveCount(0);
+    const code = await page.locator("td code").first().textContent();
     assert.match(code, /^uci_[0-9a-f]{32}$/);
-    await page.getByRole("button", { name: "已保存，关闭" }).click();
     await page.goto(activationUrl.href);
     await page.getByRole("button", { name: "读取配对请求" }).click();
     await expect(page.getByRole("region", { name: "待核对设备" })).toContainText("linux / x86_64");
@@ -49,19 +49,21 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByRole("button", { name: "新建实例", exact: true }).click();
     await page.getByRole("dialog", { name: "新建 客户端 实例" }).getByLabel("实例名称", { exact: true }).fill("待取消测试实例");
     await page.getByRole("button", { name: "创建实例", exact: true }).click();
-    await expect(page.getByLabel("配对码")).toBeVisible();
-    await page.getByRole("button", { name: "已保存，关闭" }).click();
+    await expect(page.getByRole("dialog", { name: "新建 客户端 实例" })).toHaveCount(0);
     await page.getByRole("button", { name: "取消配对", exact: true }).click();
     await page.getByRole("button", { name: "确认", exact: true }).click();
     await expect(page.getByRole("cell", { name: "已取消", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "选择实例 真实后端测试主机", exact: true }).click();
     await expect(page.getByRole("heading", { name: "真实后端测试主机", exact: true })).toBeVisible();
-    const left = await page.getByRole("complementary", { name: "监控实例" }).boundingBox();
-    const right = await page.getByRole("region", { name: "实例详情与设置" }).boundingBox();
-    assert.ok(left.x + left.width < right.x);
+    await expect(page.getByRole("region", { name: "详细信息与设置" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "最新设备信息", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "历史趋势", exact: true })).toBeVisible();
     await page.getByLabel("实例名称", { exact: true }).fill("修改后的监控实例");
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "修改后的监控实例", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "实例列表", exact: true }).click();
     await expect(page.getByRole("button", { name: "选择实例 修改后的监控实例", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "选择实例 修改后的监控实例", exact: true }).click();
     await page.getByRole("button", { name: "切换到深色模式", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.getByRole("button", { name: "切换到浅色模式", exact: true }).click();
@@ -71,6 +73,6 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByRole("button", { name: "确认", exact: true }).click();
     await expect(page.getByRole("button", { name: "选择实例 修改后的监控实例", exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
-    console.log("Real Host backend: pairing/deep link/cancel/select/two-column layout/save/delete/theme toggle passed");
+    console.log("Real Host backend: pairing/deep link/cancel/select/details/save/delete/theme toggle passed");
   } finally { await browser.close(); }
 });

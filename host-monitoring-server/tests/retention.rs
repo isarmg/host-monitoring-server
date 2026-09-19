@@ -246,7 +246,7 @@ async fn utc_boundaries_nulls_latest_and_aggregate_expiry_are_exact() {
         .await
         .unwrap();
     assert_eq!(outcome.aggregated_reports, 6);
-    assert_eq!(outcome.deleted_raw_reports, 6);
+    assert_eq!(outcome.deleted_raw_reports, 5);
     assert_eq!(outcome.deleted_hourly_aggregates, 1);
 
     let remaining: Vec<Uuid> =
@@ -254,10 +254,27 @@ async fn utc_boundaries_nulls_latest_and_aggregate_expiry_are_exact() {
             .fetch_all(&database.pool)
             .await
             .unwrap();
-    assert_eq!(remaining.len(), 2);
+    assert_eq!(remaining.len(), 3);
     assert!(remaining.contains(&latest_id));
     assert!(remaining.contains(&exactly_raw_cutoff));
-    assert!(!remaining.contains(&just_before_raw_cutoff));
+    assert!(remaining.contains(&just_before_raw_cutoff));
+
+    let series = store::history_series(
+        &database.pool,
+        host_id,
+        timestamp("2026-08-28T10:00:00Z"),
+        timestamp("2026-08-28T13:00:00Z"),
+        720,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(series.source, "mixed");
+    assert_eq!(series.step_seconds, 3600);
+    assert_eq!(series.points.len(), 2);
+    assert_eq!(series.points[0].sample_count, 3);
+    assert_eq!(series.points[0].cpu_usage_percent.count, 2);
+    assert_eq!(series.points[0].cpu_usage_percent.avg, Some(20.0));
 
     let row = sqlx::query(
         r#"SELECT interval_start,interval_end,sample_count,

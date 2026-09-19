@@ -19,7 +19,7 @@ Host Monitoring 是独立部署的主机遥测系统：每台受管主机运行 
 | `host-protocol` | 配对和报告的唯一 wire contract | 网络、磁盘和 UI |
 | `host-monitor` | 采集、配对、本地状态、spool、投递 | 管理员会话和历史查询 |
 | Server | 认证、准入、持久化、聚合、保留 | 远程 Shell 和主机修复 |
-| Web | 管理员认证与 Host 列表 JSON | pairing 管理、详情/history、图表、备注/删除、audit 与 Secret 保存 |
+| Web | 管理员认证、实例分页与配对、完整最新详情、自动更新、历史趋势、备注/删除 | audit 查询与导出 |
 
 ## 1.3 当前版本是一个整体
 
@@ -73,7 +73,7 @@ host-monitoring/
 2. HTTP 超时不等于服务端未处理；Client 必须依据可重试分类保留原报告 ID。
 3. 实例授权码长期存在但不是报告 credential；管理员更换它会撤销当前 Client credential，并要求显式重新配对。
 4. 卸载程序默认保留本地状态不表示该状态可被另一发行读取；再次安装前必须验证当前 identity。
-5. 当前 Web 没有图表和 history 视图；页面中的列表 JSON 只反映 Host summary/latest 标量。
+5. Web 的历史趋势使用有界自动粒度接口；完整逐设备信息只代表最新报告，不能据此推断逐设备历史。
 
 ## 1.9 本章检查
 

@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -13,7 +13,7 @@ use sqlx::{FromRow, QueryBuilder, Sqlite, SqlitePool};
 use tokio::{
     sync::Notify,
     task::JoinHandle,
-    time::{MissedTickBehavior, interval, sleep, timeout},
+    time::{sleep, timeout},
 };
 use uuid::Uuid;
 
@@ -26,6 +26,13 @@ pub const MAX_RETENTION_BATCH_SIZE: usize = 512;
 pub const MAX_RETENTION_TRANSACTIONS: usize = 30;
 pub const MAX_RETENTION_RUN_TIME: Duration = Duration::from_secs(10);
 pub const MAX_RETENTION_YIELD: Duration = Duration::from_millis(100);
+pub const DEFAULT_RAW_RETENTION_DAYS: u64 = 7;
+pub const DEFAULT_AGGREGATE_RETENTION_DAYS: u64 = 365;
+pub const DEFAULT_MAINTENANCE_INTERVAL_SECONDS: u64 = 300;
+pub const DEFAULT_RETENTION_BATCH_SIZE: usize = 256;
+pub const DEFAULT_RETENTION_TRANSACTIONS: usize = 12;
+pub const DEFAULT_RETENTION_RUN_MILLISECONDS: u64 = 2_000;
+pub const DEFAULT_RETENTION_YIELD_MILLISECONDS: u64 = 10;
 
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(2);
 const METRIC_NAMES: [&str; 9] = [
@@ -106,13 +113,13 @@ impl RetentionConfig {
 
     pub fn production() -> Self {
         Self::new(
-            Duration::from_secs(7 * 24 * 60 * 60),
-            Duration::from_secs(365 * 24 * 60 * 60),
-            Duration::from_secs(5 * 60),
-            256,
-            12,
-            Duration::from_secs(2),
-            Duration::from_millis(10),
+            Duration::from_secs(DEFAULT_RAW_RETENTION_DAYS * 24 * 60 * 60),
+            Duration::from_secs(DEFAULT_AGGREGATE_RETENTION_DAYS * 24 * 60 * 60),
+            Duration::from_secs(DEFAULT_MAINTENANCE_INTERVAL_SECONDS),
+            DEFAULT_RETENTION_BATCH_SIZE,
+            DEFAULT_RETENTION_TRANSACTIONS,
+            Duration::from_millis(DEFAULT_RETENTION_RUN_MILLISECONDS),
+            Duration::from_millis(DEFAULT_RETENTION_YIELD_MILLISECONDS),
         )
         .expect("the built-in retention limits are valid")
     }
@@ -158,6 +165,7 @@ pub struct RetentionRunOutcome {
     pub deleted_raw_reports: u64,
     pub deleted_hourly_aggregates: u64,
     pub transactions: usize,
+    pub backlog_remaining: bool,
 }
 
 impl RetentionRunOutcome {
@@ -180,6 +188,9 @@ pub struct RetentionMaintenanceStats {
     pub running: bool,
     pub runs: u64,
     pub failures: u64,
+    pub consecutive_failures: u64,
+    pub last_success_unix_seconds: i64,
+    pub backlog_remaining: bool,
     pub aggregated_reports: u64,
     pub deleted_raw_reports: u64,
     pub deleted_hourly_aggregates: u64,
@@ -190,6 +201,9 @@ struct MaintenanceCounters {
     running: AtomicBool,
     runs: AtomicU64,
     failures: AtomicU64,
+    consecutive_failures: AtomicU64,
+    last_success_unix_seconds: AtomicI64,
+    backlog_remaining: AtomicBool,
     aggregated_reports: AtomicU64,
     deleted_raw_reports: AtomicU64,
     deleted_hourly_aggregates: AtomicU64,
@@ -201,6 +215,9 @@ impl MaintenanceCounters {
             running: self.running.load(Ordering::Acquire),
             runs: self.runs.load(Ordering::Relaxed),
             failures: self.failures.load(Ordering::Relaxed),
+            consecutive_failures: self.consecutive_failures.load(Ordering::Relaxed),
+            last_success_unix_seconds: self.last_success_unix_seconds.load(Ordering::Relaxed),
+            backlog_remaining: self.backlog_remaining.load(Ordering::Relaxed),
             aggregated_reports: self.aggregated_reports.load(Ordering::Relaxed),
             deleted_raw_reports: self.deleted_raw_reports.load(Ordering::Relaxed),
             deleted_hourly_aggregates: self.deleted_hourly_aggregates.load(Ordering::Relaxed),
@@ -208,6 +225,11 @@ impl MaintenanceCounters {
     }
 
     fn record(&self, outcome: RetentionRunOutcome) {
+        self.consecutive_failures.store(0, Ordering::Relaxed);
+        self.last_success_unix_seconds
+            .store(Utc::now().timestamp(), Ordering::Relaxed);
+        self.backlog_remaining
+            .store(outcome.backlog_remaining, Ordering::Relaxed);
         self.aggregated_reports
             .fetch_add(outcome.aggregated_reports, Ordering::Relaxed);
         self.deleted_raw_reports
@@ -265,6 +287,10 @@ impl RetentionMaintenance {
     pub fn is_running(&self) -> bool {
         self.counters.running.load(Ordering::Acquire)
     }
+
+    pub fn is_healthy(&self) -> bool {
+        self.is_running() && self.counters.consecutive_failures.load(Ordering::Relaxed) < 3
+    }
 }
 
 impl RetentionMaintenanceTask {
@@ -310,8 +336,7 @@ async fn run_maintenance(
     shutdown: Arc<ShutdownState>,
 ) {
     let _guard = RunningGuard(counters.clone());
-    let mut ticker = interval(config.maintenance_interval);
-    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    let mut delay = Duration::ZERO;
     loop {
         tokio::select! {
             _ = shutdown.notify.notified() => {
@@ -319,7 +344,7 @@ async fn run_maintenance(
                     break;
                 }
             }
-            _ = ticker.tick() => {
+            _ = sleep(delay) => {
                 counters.runs.fetch_add(1, Ordering::Relaxed);
                 let maintenance = run_once_at(&pool, config, Utc::now());
                 tokio::select! {
@@ -329,9 +354,20 @@ async fn run_maintenance(
                         }
                     }
                     result = maintenance => match result {
-                        Ok(outcome) => counters.record(outcome),
+                        Ok(outcome) => {
+                            delay = if outcome.backlog_remaining {
+                                MIN_MAINTENANCE_INTERVAL
+                            } else {
+                                config.maintenance_interval
+                            };
+                            counters.record(outcome);
+                        }
                         Err(error) => {
                             counters.failures.fetch_add(1, Ordering::Relaxed);
+                            let consecutive = counters.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
+                            delay = MIN_MAINTENANCE_INTERVAL
+                                .saturating_mul(1_u32 << consecutive.min(8))
+                                .min(config.maintenance_interval);
                             tracing::warn!(error = %error, "bounded telemetry retention maintenance failed; a later run will retry");
                         }
                     }
@@ -380,7 +416,7 @@ async fn run_cycle_at(
             break;
         }
 
-        let deleted = delete_aggregated_raw_batch(pool, config.batch_size).await?;
+        let deleted = delete_aggregated_raw_batch(pool, raw_cutoff, config.batch_size).await?;
         outcome.add(RetentionRunOutcome {
             deleted_raw_reports: deleted,
             transactions: 1,
@@ -404,6 +440,10 @@ async fn run_cycle_at(
             break;
         }
     }
+    outcome.backlog_remaining = outcome.transactions >= config.max_transactions_per_run
+        && (outcome.aggregated_reports > 0
+            || outcome.deleted_raw_reports > 0
+            || outcome.deleted_hourly_aggregates > 0);
     Ok(outcome)
 }
 
@@ -584,13 +624,18 @@ async fn aggregate_raw_batch(
     Ok(marked)
 }
 
-async fn delete_aggregated_raw_batch(pool: &SqlitePool, batch_size: usize) -> anyhow::Result<u64> {
+async fn delete_aggregated_raw_batch(
+    pool: &SqlitePool,
+    received_cutoff: DateTime<Utc>,
+    batch_size: usize,
+) -> anyhow::Result<u64> {
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let result = sqlx::query(
         r#"DELETE FROM client_metric_reports
             WHERE report_id IN (
                 SELECT r.report_id FROM client_metric_reports r
                  WHERE r.aggregated_at IS NOT NULL
+                   AND r.received_at < ?
                    AND NOT EXISTS (
                        SELECT 1 FROM monitored_hosts h
                         WHERE h.latest_report_id=r.report_id
@@ -603,6 +648,7 @@ async fn delete_aggregated_raw_batch(pool: &SqlitePool, batch_size: usize) -> an
                    WHERE h.latest_report_id=client_metric_reports.report_id
               )"#,
     )
+    .bind(received_cutoff)
     .bind(i64::try_from(batch_size)?)
     .execute(&mut *tx)
     .await?;

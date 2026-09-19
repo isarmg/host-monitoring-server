@@ -30,7 +30,7 @@ try {
               status: "pending", created_at: "2026-09-05T00:00:00Z", authorization_code: code };
             return route.fulfill({ status: 201, json: { ...invitation, activation_code: code } });
           }
-          return route.fulfill({ json: invitation ? [invitation] : [] });
+          return route.fulfill({ json: { instances: invitation ? [invitation] : [], hosts: [], total: invitation ? 1 : 0, limit: 50, offset: 0 } });
         }
         if (path.endsWith(`/client-instances/${inviteId}`)) {
           if (invitation.status === "cancelled") invitation = null; else invitation.status = "cancelled";
@@ -66,15 +66,15 @@ try {
       await page.getByRole("dialog").locator("form").evaluate(form => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
       await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeVisible();
       assert.equal(creates, 2); release();
-      await expect(page.getByLabel("授权码")).toHaveValue(code);
-      await expect(page.getByRole("dialog")).toContainText("不会因配对成功而失效");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByRole("cell").filter({ hasText: code })).toBeVisible();
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
         assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
       }
       assert.equal(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }).includes("uci_")), false);
-      await page.getByRole("button", { name: "已保存，关闭" }).click();
-      await expect(page.getByLabel("授权码")).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByRole("dialog", { name: "新建 客户端 实例" })).toHaveCount(0);
       await page.getByRole("button", { name: "取消配对", exact: true }).click();
       await page.getByRole("button", { name: "确认", exact: true }).click();
       await expect(page.getByRole("cell", { name: "已取消", exact: true })).toBeVisible();
@@ -96,7 +96,7 @@ try {
       assert.ok(!page.url().includes(code));
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual(errors, []);
-      console.log(`${engine.name()}: instance/create/failure/single submit/long-lived code/cancel/deep-link/device confirmation/activation passed`);
+      console.log(`${engine.name()}: instance/create/immediate-close/failure/single submit/long-lived code/cancel/deep-link/device confirmation/activation passed`);
     } finally { await browser.close(); }
   }
 } finally { await new Promise(done => server.httpServer.close(done)); }

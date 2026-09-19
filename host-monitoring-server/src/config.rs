@@ -8,7 +8,11 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use clap::{Parser, Subcommand};
 
-use crate::retention::RetentionConfig;
+use crate::retention::{
+    DEFAULT_AGGREGATE_RETENTION_DAYS, DEFAULT_MAINTENANCE_INTERVAL_SECONDS,
+    DEFAULT_RAW_RETENTION_DAYS, DEFAULT_RETENTION_BATCH_SIZE, DEFAULT_RETENTION_RUN_MILLISECONDS,
+    DEFAULT_RETENTION_TRANSACTIONS, DEFAULT_RETENTION_YIELD_MILLISECONDS, RetentionConfig,
+};
 use crate::telemetry::TelemetryWriterConfig;
 use sarmg_admin_auth::AdministratorOriginMode;
 
@@ -55,8 +59,6 @@ pub struct AdminResetPassword {
     pub database_url: String,
     #[arg(long)]
     pub username: String,
-    #[arg(long, hide_env_values = true)]
-    pub password: String,
 }
 
 #[derive(Clone)]
@@ -113,21 +115,33 @@ impl ValidatedConfig {
             )?),
         )?;
         let retention = RetentionConfig::new(
-            parse_days("HOST_MONITORING_RAW_RETENTION_DAYS", 7)?,
-            parse_days("HOST_MONITORING_AGGREGATE_RETENTION_DAYS", 365)?,
+            parse_days(
+                "HOST_MONITORING_RAW_RETENTION_DAYS",
+                DEFAULT_RAW_RETENTION_DAYS,
+            )?,
+            parse_days(
+                "HOST_MONITORING_AGGREGATE_RETENTION_DAYS",
+                DEFAULT_AGGREGATE_RETENTION_DAYS,
+            )?,
             Duration::from_secs(parse_u64(
                 "HOST_MONITORING_RETENTION_INTERVAL_SECONDS",
-                300,
+                DEFAULT_MAINTENANCE_INTERVAL_SECONDS,
             )?),
-            parse_usize("HOST_MONITORING_RETENTION_BATCH_SIZE", 256)?,
-            parse_usize("HOST_MONITORING_RETENTION_MAX_TRANSACTIONS_PER_RUN", 12)?,
+            parse_usize(
+                "HOST_MONITORING_RETENTION_BATCH_SIZE",
+                DEFAULT_RETENTION_BATCH_SIZE,
+            )?,
+            parse_usize(
+                "HOST_MONITORING_RETENTION_MAX_TRANSACTIONS_PER_RUN",
+                DEFAULT_RETENTION_TRANSACTIONS,
+            )?,
             Duration::from_millis(parse_u64(
                 "HOST_MONITORING_RETENTION_MAX_RUN_MILLISECONDS",
-                2_000,
+                DEFAULT_RETENTION_RUN_MILLISECONDS,
             )?),
             Duration::from_millis(parse_u64(
                 "HOST_MONITORING_RETENTION_YIELD_MILLISECONDS",
-                10,
+                DEFAULT_RETENTION_YIELD_MILLISECONDS,
             )?),
         )?;
         Ok(Self {

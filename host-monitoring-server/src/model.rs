@@ -120,6 +120,22 @@ pub struct ClientInstanceSummary {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ClientInstanceListResponse {
+    pub instances: Vec<ClientInstanceSummary>,
+    pub hosts: Vec<HostSummary>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClientInstanceListQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct CreatedClientInstance {
     #[serde(flatten)]
     pub summary: ClientInstanceSummary,
@@ -230,12 +246,50 @@ pub struct HistoryResponse {
     pub points: Vec<HistoryPoint>,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+pub struct MetricAggregate {
+    pub count: i64,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub avg: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HistoryBucket {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+    pub sample_count: i64,
+    pub cpu_usage_percent: MetricAggregate,
+    pub memory_usage_percent: MetricAggregate,
+    pub network_received_bytes_per_second: MetricAggregate,
+    pub network_transmitted_bytes_per_second: MetricAggregate,
+    pub disk_read_bytes_per_second: MetricAggregate,
+    pub disk_written_bytes_per_second: MetricAggregate,
+    pub max_temperature_celsius: MetricAggregate,
+    pub gpu_utilization_percent: MetricAggregate,
+    pub gpu_memory_usage_percent: MetricAggregate,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HistorySeriesResponse {
+    pub host_id: String,
+    pub requested_from: DateTime<Utc>,
+    pub requested_to: DateTime<Utc>,
+    pub actual_from: DateTime<Utc>,
+    pub actual_to: DateTime<Utc>,
+    pub step_seconds: i64,
+    pub source: String,
+    pub points: Vec<HistoryBucket>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HistoryQuery {
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
     pub limit: Option<i64>,
+    pub resolution: Option<String>,
+    pub max_points: Option<i64>,
 }
 
 pub fn validate_pairing(request: &ClientPairingRequest) -> Result<()> {
@@ -376,14 +430,9 @@ pub fn validate_report(report: &ClientReport) -> Result<MetricSummary> {
             &sensor.source,
             CLIENT_REPORT_MAX_TEMPERATURE_SOURCE_BYTES,
         )?;
-        for value in [sensor.celsius, sensor.max_celsius, sensor.critical_celsius]
-            .into_iter()
-            .flatten()
-        {
-            if !value.is_finite() || !(-273.15..=1000.0).contains(&value) {
-                return Err(Error::BadRequest("invalid temperature".into()));
-            }
-        }
+        validate_temperature(sensor.celsius)?;
+        validate_temperature(sensor.max_celsius)?;
+        validate_temperature(sensor.critical_celsius)?;
     }
     for gpu in &report.system.gpus {
         validate_optional("gpu.id", &gpu.id, CLIENT_REPORT_MAX_GPU_ID_BYTES)?;
@@ -401,6 +450,7 @@ pub fn validate_report(report: &ClientReport) -> Result<MetricSummary> {
         if let Some(value) = gpu.utilization_percent {
             percent("gpu.utilization_percent", value)?;
         }
+        validate_temperature(gpu.temperature_celsius)?;
         if gpu
             .memory_used_bytes
             .zip(gpu.memory_total_bytes)
@@ -496,6 +546,13 @@ fn validate_optional(field: &str, value: &str, max: usize) -> Result<()> {
 fn percent(field: &str, value: f64) -> Result<()> {
     if !value.is_finite() || !(0.0..=100.0).contains(&value) {
         return Err(Error::BadRequest(format!("invalid {field}")));
+    }
+    Ok(())
+}
+
+fn validate_temperature(value: Option<f64>) -> Result<()> {
+    if value.is_some_and(|value| !value.is_finite() || !(-273.15..=1000.0).contains(&value)) {
+        return Err(Error::BadRequest("invalid temperature".into()));
     }
     Ok(())
 }

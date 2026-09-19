@@ -9,7 +9,7 @@ export const administratorApi = createAdministratorApiClient({
   baseUrl: globalThis.location.href,
 });
 
-type Capability = {
+export type Capability = {
   name: string;
   available: boolean;
   source: string;
@@ -22,6 +22,48 @@ type Capability = {
     | "invalid_data"
     | null;
   message: string | null;
+};
+
+export type JsonInteger = number | string;
+export type ClientReport = {
+  schema_version: number;
+  report_id: string;
+  collected_at: string;
+  host: { id: string; os: string; os_version: string | null; kernel_version: string | null; arch: string; client_version: string };
+  interval_seconds: number;
+  system: {
+    uptime_seconds: JsonInteger;
+    cpu: Record<string, unknown>;
+    memory: Record<string, unknown>;
+    networks: Record<string, unknown>[];
+    disks: Record<string, unknown>[];
+    temperatures: Record<string, unknown>[];
+    gpus: Record<string, unknown>[];
+  };
+  capabilities: Capability[];
+  client: { spool_pending_batches: JsonInteger; collector_errors: JsonInteger };
+};
+
+export type HostDetailResponse = { host: Host; latest: ClientReport | null };
+export type HistoryPoint = {
+  report_id: string; collected_at: string; received_at: string;
+  cpu_usage_percent: number | null; memory_usage_percent: number | null;
+  network_received_bytes_per_second: number | null; network_transmitted_bytes_per_second: number | null;
+  disk_read_bytes_per_second: number | null; disk_written_bytes_per_second: number | null;
+  max_temperature_celsius: number | null; gpu_utilization_percent: number | null; gpu_memory_usage_percent: number | null;
+};
+export type HistoryResponse = { host_id: string; points: HistoryPoint[] };
+export type MetricAggregate = { count: number; min: number | null; max: number | null; avg: number | null };
+export type HistoryBucket = {
+  start: string; end: string; sample_count: number;
+  cpu_usage_percent: MetricAggregate; memory_usage_percent: MetricAggregate;
+  network_received_bytes_per_second: MetricAggregate; network_transmitted_bytes_per_second: MetricAggregate;
+  disk_read_bytes_per_second: MetricAggregate; disk_written_bytes_per_second: MetricAggregate;
+  max_temperature_celsius: MetricAggregate; gpu_utilization_percent: MetricAggregate; gpu_memory_usage_percent: MetricAggregate;
+};
+export type HistorySeriesResponse = {
+  host_id: string; requested_from: string; requested_to: string; actual_from: string; actual_to: string;
+  step_seconds: number; source: "raw" | "hourly" | "mixed"; points: HistoryBucket[];
 };
 
 export type Host = {
@@ -109,7 +151,37 @@ export function isHostListResponse(value: unknown): value is HostListResponse {
   );
 }
 
-function isHost(value: unknown): value is Host {
+export function isHostDetailResponse(value: unknown): value is HostDetailResponse {
+  return isRecordWithExactKeys(value, ["host", "latest"]) && isHost(value.host)
+    && (value.latest === null || isClientReport(value.latest));
+}
+
+export function isHistoryResponse(value: unknown): value is HistoryResponse {
+  const metricKeys = HOST_KEYS.slice(12);
+  return isRecordWithExactKeys(value, ["host_id", "points"]) && isUuid(value.host_id)
+    && Array.isArray(value.points) && value.points.length <= 1000
+    && value.points.every(point => isRecordWithExactKeys(point, ["report_id", "collected_at", "received_at", ...metricKeys])
+      && isUuid(point.report_id) && isUtcTimestamp(point.collected_at) && isUtcTimestamp(point.received_at)
+      && metricKeys.every(key => isNullableFiniteNumber(point[key])));
+}
+
+export function isHistorySeriesResponse(value: unknown): value is HistorySeriesResponse {
+  const metricKeys = HOST_KEYS.slice(12);
+  return isRecordWithExactKeys(value, ["host_id", "requested_from", "requested_to", "actual_from", "actual_to", "step_seconds", "source", "points"])
+    && isUuid(value.host_id) && isUtcTimestamp(value.requested_from) && isUtcTimestamp(value.requested_to)
+    && isUtcTimestamp(value.actual_from) && isUtcTimestamp(value.actual_to) && isPositiveSafeInteger(value.step_seconds)
+    && ["raw", "hourly", "mixed"].includes(String(value.source)) && Array.isArray(value.points) && value.points.length <= 1000
+    && value.points.every(point => isRecordWithExactKeys(point, ["start", "end", "sample_count", ...metricKeys])
+      && isUtcTimestamp(point.start) && isUtcTimestamp(point.end) && isPositiveSafeInteger(point.sample_count)
+      && metricKeys.every(key => isMetricAggregate(point[key])));
+}
+
+function isMetricAggregate(value: unknown): value is MetricAggregate {
+  return isRecordWithExactKeys(value, ["count", "min", "max", "avg"]) && isNonNegativeSafeInteger(value.count)
+    && isNullableFiniteNumber(value.min) && isNullableFiniteNumber(value.max) && isNullableFiniteNumber(value.avg);
+}
+
+export function isHost(value: unknown): value is Host {
   if (!isRecordWithExactKeys(value, HOST_KEYS)) return false;
   return (
     isUuid(value.id) &&
@@ -149,6 +221,32 @@ function isCapability(value: unknown): value is Capability {
         CAPABILITY_ERROR_KINDS.has(value.error_kind))) &&
     isNullableText(value.message)
   );
+}
+
+function isClientReport(value: unknown): value is ClientReport {
+  if (!isRecordWithExactKeys(value, ["schema_version", "report_id", "collected_at", "host", "interval_seconds", "system", "capabilities", "client"])) return false;
+  if (!Number.isSafeInteger(value.schema_version) || !isUuid(value.report_id) || !isUtcTimestamp(value.collected_at)
+      || typeof value.interval_seconds !== "number" || !Number.isFinite(value.interval_seconds)) return false;
+  if (!isRecordWithExactKeys(value.host, ["id", "os", "os_version", "kernel_version", "arch", "client_version"])
+      || !isUuid(value.host.id) || !isText(value.host.os) || !isNullableText(value.host.os_version)
+      || !isNullableText(value.host.kernel_version) || !isText(value.host.arch) || !isText(value.host.client_version)) return false;
+  if (!isRecordWithExactKeys(value.system, ["uptime_seconds", "cpu", "memory", "networks", "disks", "temperatures", "gpus"])
+      || !isJsonInteger(value.system.uptime_seconds) || !isRecord(value.system.cpu) || !isRecord(value.system.memory)
+      || !Array.isArray(value.system.networks) || !value.system.networks.every(isRecord)
+      || !Array.isArray(value.system.disks) || !value.system.disks.every(isRecord)
+      || !Array.isArray(value.system.temperatures) || !value.system.temperatures.every(isRecord)
+      || !Array.isArray(value.system.gpus) || !value.system.gpus.every(isRecord)) return false;
+  return Array.isArray(value.capabilities) && value.capabilities.every(isCapability)
+    && isRecordWithExactKeys(value.client, ["spool_pending_batches", "collector_errors"])
+    && isJsonInteger(value.client.spool_pending_batches) && isJsonInteger(value.client.collector_errors);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isJsonInteger(value: unknown): value is JsonInteger {
+  return isNonNegativeSafeInteger(value) || (typeof value === "string" && /^(?:0|[1-9][0-9]*)$/.test(value));
 }
 
 function isRecordWithExactKeys(
@@ -216,6 +314,13 @@ export type ClientInstance = {
   authorization_code: string;
 };
 export type CreatedInstance = ClientInstance & { activation_code: string };
+export type ClientInstanceListResponse = {
+  instances: ClientInstance[];
+  hosts: Host[];
+  total: number;
+  limit: number;
+  offset: number;
+};
 const INSTANCE_KEYS = ["request_id", "instance_id", "display_name", "status", "created_at", "authorization_code"];
 function instanceFields(value: Record<string, unknown>): boolean {
   return isUuid(value.request_id) && isUuid(value.instance_id) && isText(value.display_name)
@@ -223,8 +328,13 @@ function instanceFields(value: Record<string, unknown>): boolean {
     && isUtcTimestamp(value.created_at) && typeof value.authorization_code === "string"
     && /^uci_[0-9a-f]{32}$/.test(value.authorization_code);
 }
-export function isInstances(value: unknown): value is ClientInstance[] {
-  return Array.isArray(value) && value.length <= 200 && value.every(item => isRecordWithExactKeys(item, INSTANCE_KEYS) && instanceFields(item));
+export function isInstances(value: unknown): value is ClientInstanceListResponse {
+  return isRecordWithExactKeys(value, ["instances", "hosts", "total", "limit", "offset"])
+    && Array.isArray(value.instances) && value.instances.length <= 100
+    && value.instances.every(item => isRecordWithExactKeys(item, INSTANCE_KEYS) && instanceFields(item))
+    && Array.isArray(value.hosts) && value.hosts.length <= value.instances.length && value.hosts.every(isHost)
+    && isNonNegativeSafeInteger(value.total) && isPositiveSafeInteger(value.limit)
+    && value.limit <= 100 && isNonNegativeSafeInteger(value.offset);
 }
 export function isInstance(value: unknown): value is ClientInstance {
   return isRecordWithExactKeys(value, INSTANCE_KEYS) && instanceFields(value);
