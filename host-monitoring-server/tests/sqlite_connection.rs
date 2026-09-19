@@ -132,7 +132,7 @@ async fn exact_current_schema_survives_close_and_reopen() {
         (
             1,
             database_schema::APPLICATION.to_string(),
-            "0.9.14".to_string(),
+            "0.9.15".to_string(),
             database_schema::SCHEMA_REVISION,
             database_schema::SCHEMA_SHA256.to_string(),
         )

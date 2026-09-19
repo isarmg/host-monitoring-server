@@ -30,7 +30,7 @@ Host Monitoring
 Server 进程只允许 `x86_64-unknown-linux-gnu` 构建，并在解析命令/配置前通过 `uname` 确认当前内核是
 Linux、机器是 x86_64。正式二进制要求 `--root` 是规范绝对的 `.../releases/0.8.1` 且当前 executable
 就是该树的 `bin/host-monitoring-server`；systemd 提供的标准部署根才固定为
-`/opt/isarmg/host-monitoring/releases/0.8.1`。随后验证 manifest、完整源码 revision、target、API、
+`/opt/isarmg/host-monitoring/releases/0.8.2`。随后验证 manifest、完整源码 revision、target、API、
 Schema、Web 文件集合/Hash/权限，再解析
 `HOST_MONITORING_*`。随后取得数据库 instance
 排他锁和 maintenance 共享锁；已有库先用独立只读连接验证 `product_metadata` 与实际
