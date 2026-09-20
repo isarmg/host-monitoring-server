@@ -21,6 +21,8 @@ pub enum Error {
     ClientHostMismatch,
     #[error("{0}")]
     NotFound(String),
+    #[error("pairing transaction no longer exists")]
+    PairingTransactionNotFound { request_id: uuid::Uuid },
     #[error("{0}")]
     Conflict(String),
     #[error("{0}")]
@@ -57,7 +59,7 @@ impl IntoResponse for Error {
             Self::BadRequest(_) | Self::UnsupportedClientProtocol { .. } => StatusCode::BAD_REQUEST,
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden | Self::ClientHostMismatch => StatusCode::FORBIDDEN,
-            Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::NotFound(_) | Self::PairingTransactionNotFound { .. } => StatusCode::NOT_FOUND,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::UnsupportedMediaType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::LoginRateLimited { .. } | Self::RateLimited { .. } => {
@@ -86,6 +88,9 @@ impl IntoResponse for Error {
             Self::Forbidden => ErrorEnvelope::new(HttpStatus::Forbidden, message),
             Self::ClientHostMismatch => product_envelope("client_host_mismatch", message, false),
             Self::NotFound(_) => ErrorEnvelope::new(HttpStatus::NotFound, message),
+            Self::PairingTransactionNotFound { .. } => {
+                product_envelope("pairing_transaction_not_found", message, false)
+            }
             Self::Conflict(_) => ErrorEnvelope::new(HttpStatus::Conflict, message),
             Self::UnsupportedMediaType(_) => {
                 product_envelope("unsupported_media_type", message, false)
@@ -104,11 +109,14 @@ impl IntoResponse for Error {
         if let Self::UnsupportedClientProtocol {
             received,
             supported,
-        } = self
+        } = &self
         {
             envelope = envelope
-                .with_detail("received", received)
-                .with_detail("supported", [supported]);
+                .with_detail("received", *received)
+                .with_detail("supported", [*supported]);
+        }
+        if let Self::PairingTransactionNotFound { request_id } = &self {
+            envelope = envelope.with_detail("request_id", request_id.to_string());
         }
         let mut response = (status, Json(envelope)).into_response();
         response.extensions_mut().insert(FoundationErrorEnvelope);
@@ -242,6 +250,23 @@ mod tests {
                 "message": "Client pairing protocol is unsupported",
                 "retryable": false,
                 "details": {"received": 2, "supported": [1]}
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn missing_pairing_transaction_has_a_dedicated_safe_error() {
+        let request_id = uuid::Uuid::new_v4();
+        let response = Error::PairingTransactionNotFound { request_id }.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            json!({
+                "code": "pairing_transaction_not_found",
+                "message": "pairing transaction no longer exists",
+                "retryable": false,
+                "details": {"request_id": request_id.to_string()}
             })
         );
     }

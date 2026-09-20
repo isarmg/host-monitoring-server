@@ -233,6 +233,28 @@ async fn framework_api_rejections_are_replaced_by_the_same_strict_envelope() {
 }
 
 #[tokio::test]
+async fn missing_pairing_status_uses_the_dedicated_transaction_code() {
+    let fixture = fixture().await;
+    let request_id = Uuid::new_v4();
+    let mut request = Request::post(format!(
+        "/api/v2/host-monitor/pairing-requests/{request_id}/status"
+    ))
+    .header(header::AUTHORIZATION, format!("Pairing {}", "a".repeat(64)))
+    .body(Body::empty())
+    .unwrap();
+    request.extensions_mut().insert(axum::extract::ConnectInfo(
+        "127.0.0.1:42000".parse::<std::net::SocketAddr>().unwrap(),
+    ));
+    let response = fixture.app.clone().oneshot(request).await.unwrap();
+    let (status, _, body) = response_contract(response).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let envelope: ErrorEnvelope = serde_json::from_slice(&body).unwrap();
+    assert_eq!(envelope.code.as_str(), "pairing_transaction_not_found");
+    assert_eq!(envelope.details["request_id"], request_id.to_string());
+    assert!(!envelope.retryable);
+}
+
+#[tokio::test]
 async fn credential_status_requires_a_current_token_and_returns_the_bound_identity() {
     let fixture = fixture().await;
     let host_id = Uuid::new_v4();

@@ -175,6 +175,72 @@ async fn pending_pairings_are_capped_per_device_without_breaking_idempotent_retr
 }
 
 #[tokio::test]
+async fn expired_pairing_is_persisted_and_retained_for_twenty_four_hours() {
+    let path = database_path();
+    let pool = open_database(&path).await;
+    store::initialize_empty(&pool).await.unwrap();
+    let polling_secret_hash = token_hash("retained-expired-polling-secret");
+    let request = ClientPairingRequest {
+        protocol_version: host_protocol::HOST_PAIRING_PROTOCOL_VERSION,
+        mode: ClientPairingMode::Fresh,
+        host: host(Uuid::new_v4(), "linux"),
+        token_hash: token_hash("retained-expired-client-token"),
+        polling_secret_hash: polling_secret_hash.clone(),
+    };
+    let store::CreatePairingResult::Ready { request_id, .. } =
+        store::create_pairing(&pool, &request).await.unwrap()
+    else {
+        panic!("pairing request was not created")
+    };
+    sqlx::query("UPDATE client_pairing_requests SET expires_at=? WHERE request_id=?")
+        .bind(Utc::now() - Duration::hours(1))
+        .bind(request_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store::pairing_status(&pool, request_id, &polling_secret_hash)
+            .await
+            .unwrap(),
+        Some((PairingStatus::Expired, None))
+    );
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM client_pairing_requests WHERE request_id=?")
+            .bind(request_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "expired");
+    assert!(
+        store::pairing_request_exists(&pool, request_id)
+            .await
+            .unwrap()
+    );
+
+    sqlx::query("UPDATE client_pairing_requests SET expires_at=? WHERE request_id=?")
+        .bind(Utc::now() - Duration::hours(25))
+        .bind(request_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let replacement = ClientPairingRequest {
+        polling_secret_hash: token_hash("replacement-polling-secret"),
+        token_hash: token_hash("replacement-client-token"),
+        ..request
+    };
+    assert!(matches!(
+        store::create_pairing(&pool, &replacement).await.unwrap(),
+        store::CreatePairingResult::Ready { created: true, .. }
+    ));
+    assert!(
+        !store::pairing_request_exists(&pool, request_id)
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
 async fn cancelled_code_cannot_authorize_a_new_pairing() {
     let path = database_path();
     let pool = open_database(&path).await;

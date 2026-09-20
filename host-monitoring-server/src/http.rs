@@ -584,7 +584,7 @@ async fn pairing_public(
     let value = store::pairing_public(&state.pool, id)
         .await
         .map_err(database)?
-        .ok_or_else(|| Error::NotFound("pairing request not found".into()))?;
+        .ok_or(Error::PairingTransactionNotFound { request_id: id })?;
     let mut response = Json(value).into_response();
     response
         .headers_mut()
@@ -604,10 +604,20 @@ async fn pairing_status(
     if !(32..=256).contains(&secret.len()) || secret.chars().any(char::is_whitespace) {
         return Err(Error::Unauthorized);
     }
-    let (status, instance_id) = store::pairing_status(&state.pool, id, &crate::token_hash(secret))
-        .await
-        .map_err(database)?
-        .ok_or(Error::Unauthorized)?;
+    let Some((status, instance_id)) =
+        store::pairing_status(&state.pool, id, &crate::token_hash(secret))
+            .await
+            .map_err(database)?
+    else {
+        return if store::pairing_request_exists(&state.pool, id)
+            .await
+            .map_err(database)?
+        {
+            Err(Error::Unauthorized)
+        } else {
+            Err(Error::PairingTransactionNotFound { request_id: id })
+        };
+    };
     let mut response = Json(ClientPairingStatusResponse {
         status,
         instance_id,
@@ -673,7 +683,9 @@ async fn activate(
                 .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
             Ok(response)
         }
-        store::ActivateResult::NotFound => Err(Error::NotFound("pairing request not found".into())),
+        store::ActivateResult::NotFound => {
+            Err(Error::PairingTransactionNotFound { request_id: id })
+        }
         store::ActivateResult::InvalidCode => Err(Error::Unauthorized),
         store::ActivateResult::Expired => Err(Error::BadRequest(
             "pairing request or activation code expired".into(),

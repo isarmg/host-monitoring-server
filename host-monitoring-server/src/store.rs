@@ -434,13 +434,27 @@ pub async fn create_pairing(
         let expires_at: DateTime<Utc> = row.try_get("expires_at")?;
         let status: String = row.try_get("status")?;
         let request_id: Uuid = row.try_get("request_id")?;
-        tx.rollback().await?;
         if !matches || status == "denied" {
+            tx.rollback().await?;
             return Ok(CreatePairingResult::Conflict);
         }
-        if expires_at <= Utc::now() {
+        if status == "expired" {
+            tx.rollback().await?;
             return Ok(CreatePairingResult::Expired);
         }
+        if status == "pending" && expires_at <= Utc::now() {
+            sqlx::query("UPDATE client_pairing_requests SET status='expired' WHERE request_id=? AND status='pending'")
+                .bind(request_id)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            return Ok(CreatePairingResult::Expired);
+        }
+        if status != "pending" {
+            tx.rollback().await?;
+            return Ok(CreatePairingResult::Conflict);
+        }
+        tx.rollback().await?;
         return Ok(CreatePairingResult::Ready {
             request_id,
             expires_at,
@@ -449,13 +463,21 @@ pub async fn create_pairing(
     }
     let now = Utc::now();
     let denied_cutoff = now - chrono::Duration::days(30);
+    let expired_cutoff = now - chrono::Duration::hours(24);
+    sqlx::query(
+        "UPDATE client_pairing_requests SET status='expired' \
+         WHERE status='pending' AND expires_at<=?",
+    )
+    .bind(now)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(
         "DELETE FROM client_pairing_requests WHERE request_id IN (\
            SELECT request_id FROM client_pairing_requests \
-           WHERE (status='pending' AND expires_at <= ?) OR (status='denied' AND created_at < ?) \
+           WHERE (status='expired' AND expires_at <= ?) OR (status='denied' AND created_at < ?) \
            ORDER BY created_at LIMIT 512)",
     )
-    .bind(now)
+    .bind(expired_cutoff)
     .bind(denied_cutoff)
     .execute(&mut *tx)
     .await?;
@@ -521,6 +543,7 @@ pub async fn pairing_public(
     pool: &SqlitePool,
     request_id: Uuid,
 ) -> anyhow::Result<Option<ClientPairingPublicSummary>> {
+    persist_pairing_expiration(pool, request_id).await?;
     let row = sqlx::query(
         "SELECT request_id,os,arch,client_version,expires_at,CASE WHEN status='pending' AND expires_at<=? THEN 'expired' ELSE CASE WHEN status='pending' THEN 'waiting' ELSE status END END AS status \
          FROM client_pairing_requests WHERE request_id=?",
@@ -543,6 +566,7 @@ pub async fn pairing_status(
     request_id: Uuid,
     secret_hash: &str,
 ) -> anyhow::Result<Option<(PairingStatus, Option<String>)>> {
+    persist_pairing_expiration(pool, request_id).await?;
     let row = sqlx::query(
         "SELECT instance_id,CASE WHEN status='pending' AND expires_at<=? THEN 'expired' WHEN status='pending' THEN 'waiting' ELSE status END AS status \
          FROM client_pairing_requests WHERE request_id=? AND polling_secret_hash=?",
@@ -560,6 +584,28 @@ pub async fn pairing_status(
         Ok((status, instance))
     })
     .transpose()
+}
+
+async fn persist_pairing_expiration(pool: &SqlitePool, request_id: Uuid) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE client_pairing_requests SET status='expired' \
+         WHERE request_id=? AND status='pending' AND expires_at<=?",
+    )
+    .bind(request_id)
+    .bind(Utc::now())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn pairing_request_exists(pool: &SqlitePool, request_id: Uuid) -> anyhow::Result<bool> {
+    let exists: i64 = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM client_pairing_requests WHERE request_id=?)",
+    )
+    .bind(request_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists != 0)
 }
 
 pub enum ActivateResult {
