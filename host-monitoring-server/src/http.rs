@@ -687,9 +687,7 @@ async fn activate(
             Err(Error::PairingTransactionNotFound { request_id: id })
         }
         store::ActivateResult::InvalidCode => Err(Error::Unauthorized),
-        store::ActivateResult::Expired => Err(Error::BadRequest(
-            "pairing request or activation code expired".into(),
-        )),
+        store::ActivateResult::Expired => Err(Error::PairingTransactionExpired { request_id: id }),
         store::ActivateResult::Conflict => Err(Error::Conflict(
             "activation code or pairing request already used".into(),
         )),
