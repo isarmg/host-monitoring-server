@@ -24,7 +24,7 @@ identity 算法。Host Monitoring 仍独立拥有账户记录、登录准入、S
 按 Foundation 规则 trim ASCII whitespace、转 ASCII 小写后，只接受 3..64 字节、首尾为字母或数字、
 字符仅为 `[a-z0-9._-]` 的 canonical username，并明确禁止 `@`。仓库不保留 email 字段或别名。
 
-产品只接受当前 `0.9.18` 配置、协议、SQLite Schema 和发行身份。服务端与 Client 不解释任何非当前
+产品只接受当前 `0.9.19` 配置、协议、SQLite Schema 和发行身份。服务端与 Client 不解释任何非当前
 状态或路由，也不执行迁移、备份或恢复；这些能力只有在 `sarmg-upgrade` 建立明确转换边后才成立。
 
 ## 仓库组成
