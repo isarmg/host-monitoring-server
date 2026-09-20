@@ -3,7 +3,7 @@
 ## 2.1 工具链
 
 仓库固定 Rust `1.98.0` 与 `.node-version` 中的 Node `26.7.0`。Server Web 使用 lockfile 对应的 npm。
-这个 Node 版本同时满足 Foundation Server 0.8.2 包的 engine 合同；React `19.2.8`、Vite `7.3.6` 与 TypeScript
+这个 Node 版本同时满足 Foundation Server 0.8.3 包的 engine 合同；React `19.2.8`、Vite `7.3.6` 与 TypeScript
 `5.8.3` 由 `@sarmg/admin-web` 的 `ADMIN_WEB_TOOLCHAIN` 精确门禁。Linux 常规开发可覆盖协议和服务端
 逻辑；Server 的唯一目标是 `x86_64-unknown-linux-gnu`，所以完整 workspace 门禁和 Server 启动必须在
 x86_64 glibc Linux 执行。Client 源码、Windows MSI、macOS pkg 以及真实平台采集在独立

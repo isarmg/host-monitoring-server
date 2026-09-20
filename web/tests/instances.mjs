@@ -71,7 +71,12 @@ try {
       await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeVisible();
       assert.equal(creates, 2); release();
       await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "关闭通知", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "关闭通知", exact: true })).toHaveCount(0, { timeout: 7_000 });
       await expect(page.getByRole("cell").filter({ hasText: code })).toBeVisible();
+      const instanceTable = page.getByRole("table", { name: "实例列表" });
+      assert.ok((await instanceTable.locator("th, td").evaluateAll(elements => elements.map(element => getComputedStyle(element).textAlign))).every(value => value === "left"));
+      assert.ok((await instanceTable.locator(".sarmg-actions").evaluateAll(elements => elements.map(element => getComputedStyle(element).justifyContent))).every(value => value === "flex-start"));
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
         assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
