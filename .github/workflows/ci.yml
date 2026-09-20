@@ -100,16 +100,16 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-          cache-dependency-path: clients/web/package-lock.json
+          cache-dependency-path: web/package-lock.json
       - name: Install frontend dependencies
-        working-directory: clients/web
+        working-directory: web
         run: npm ci
       - name: Build standalone frontend
-        working-directory: clients/web
+        working-directory: web
         run: npm run build
       - name: Install browser acceptance engines
-        working-directory: clients/web
+        working-directory: web
         run: npx playwright install --with-deps chromium firefox
       - name: Verify current frontend business and accessibility contracts
-        working-directory: clients/web
+        working-directory: web
         run: npm run test:browser

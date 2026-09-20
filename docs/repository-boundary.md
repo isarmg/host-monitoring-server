@@ -1,7 +1,7 @@
 # Server / Client 独立构建
 
-本仓库只保留 `host-monitoring-server/`、`protocol/` 和服务端管理 Web `clients/web/`。
-`clients/web` 名称仅指浏览器源码，不代表独立安装客户端。
+本仓库只保留 `host-monitoring-server/`、`protocol/` 和服务端管理 Web `web/`。
+`web` 名称仅指浏览器源码，不代表独立安装客户端。
 原生客户端与安装脚本位于 https://github.com/isarmg/host-monitoring-client 。
 唯一协议源码在本仓库，Client 通过完整 Git 提交固定依赖，Server 不反向依赖 Client 源码。
 

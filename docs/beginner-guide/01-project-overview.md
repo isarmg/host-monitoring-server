@@ -45,15 +45,16 @@ fallback；备份、恢复和具体版本转换只有在 `sarmg-upgrade` 明确�
 ## 1.6 仓库地图
 
 ```text
-host-monitoring/
+host-monitoring-server/
 ├─ protocol/                  wire contract
-├─ clients/host-monitor/      跨平台客户端、库和安装资产
-├─ clients/web/               React/Vite 管理员认证与 Host 列表
+├─ web/                       React/Vite 管理员认证与 Host 列表
 ├─ host-monitoring-server/    API、SQLite 与发行合同
-├─ config/                    Server env 与 Client JSON 的当前样例
+├─ config/                    Server env 当前样例
 ├─ deploy/                    Server systemd 源资产
 ├─ scripts/                   发布和供应链检查
 └─ docs/                      教程、流程、取舍与运维
+
+host-monitoring-client/       独立的跨平台客户端、配置和安装资产
 ```
 
 阅读代码时先看 `protocol`，再分别跟踪 Client 和 Server；否则容易把同名字段的传输语义与存储语义混为

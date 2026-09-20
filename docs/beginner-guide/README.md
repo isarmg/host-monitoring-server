@@ -45,7 +45,7 @@ host-monitoring-server
   ├─ telemetry/store：有界队列和 SQLite 写入器
   ├─ retention：小时聚合与保留
 
-clients/web
+web
   └─ React/Vite 最小状态页：管理员认证与 Host 列表（Server 仅 x86_64 GNU/Linux）
 ```
 
@@ -61,7 +61,7 @@ x86_64 GNU/Linux 运行；Windows/macOS CI 保留并单独验证 Client：
 rustup toolchain install 1.98.0
 cargo +1.98.0 check --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
 cargo +1.98.0 test --workspace --locked --target x86_64-unknown-linux-gnu
-cd clients/web && npm ci && npm run build
+cd web && npm ci && npm run build
 ```
 
 跨平台 Client 安装包需要额外工具：Linux nFPM 与 systemd 测试环境，Windows WiX 4/PowerShell，macOS
@@ -74,7 +74,7 @@ cd clients/web && npm ci && npm run build
 
 ```text
 HOST_MONITORING_DATABASE_URL=sqlite:///tmp/host-monitoring/app.db
-HOST_MONITORING_STATIC_DIR=/绝对路径/clients/web/dist
+HOST_MONITORING_STATIC_DIR=/绝对路径/web/dist
 HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME=admin
 HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD=<开发密码>
 HOST_MONITORING_DEVELOPMENT=true

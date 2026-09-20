@@ -48,7 +48,7 @@ SQLite reopen 与 Router→Client 合同测试；不保留旧版本 fallback。
 新建实例；创建成功后窗口立即关闭。详情每两秒自动读取同一快照的完整最新报告，页面隐藏或暂停时停止轮询，
 并提供 15 分钟至 30 天的有界自动粒度趋势。授权码轮换会撤销旧 Client credential，客户端必须重新配对。
 当前仍没有 audit 查询界面，也不保存逐设备历史。
-`cd clients/web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 分页、指标详情、移动主题与 WCAG AA 验收；
+`cd web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 分页、指标详情、移动主题与 WCAG AA 验收；
 首次运行需 `npx playwright install --with-deps chromium firefox`。该测试的 API 全部由本机测试数据拦截，不访问真实 Client。
 
 ## 3. Server 配置
@@ -187,11 +187,11 @@ host-monitor doctor --config /etc/host-monitor/config.json --delivery
 
 ## 6. Linux Client
 
-从工作区根构建并调用打包器：
+以下 Client 操作必须在独立的 `host-monitoring-client` 仓库执行：
 
 ```bash
 cargo build --release -p host-monitor
-NFPM_ARCH=amd64 clients/host-monitor/packaging/linux/build-packages.sh
+NFPM_ARCH=amd64 packaging/linux/build-packages.sh
 ```
 
 包安装 `/usr/bin/host-monitor`、0600 配置、systemd unit 和显式 purge 工具。普通卸载保留身份与 spool；
@@ -205,12 +205,12 @@ WiX 4 MSI 同时安装 Windows Service、Tray 和维护 helper。Tray 是用户�
 主体；两者通过受保护本机控制通道通信。构建/验收使用：
 
 ```powershell
-clients\host-monitor\packaging\windows\wix\build-msi.cmd 0.9.19 `
+packaging\windows\wix\build-msi.cmd 0.9.25 `
   target\x86_64-pc-windows-msvc\release\host-monitor.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-tray.exe
-powershell -File clients\host-monitor\packaging\windows\tests\Test-WixAuthoring.ps1
-powershell -File clients\host-monitor\packaging\windows\tests\Test-PeSubsystems.ps1
+powershell -File packaging\windows\tests\Test-WixAuthoring.ps1
+powershell -File packaging\windows\tests\Test-PeSubsystems.ps1
 ```
 
 当前 MSI 不声明跨版本 UpgradeCode 家族，也不迁移非当前状态。每个发行版本按全新产品安装；需要数据
@@ -222,11 +222,11 @@ powershell -File clients\host-monitor\packaging\windows\tests\Test-PeSubsystems.
 `build-pkg.sh` 生成含 LaunchDaemon、配置、日志轮转和专用不可登录账户的 pkg。验证：
 
 ```bash
-clients/host-monitor/packaging/macos/tests/validate-packaging.sh
-clients/host-monitor/packaging/macos/tests/smoke-pkg.sh
-clients/host-monitor/packaging/macos/tests/account-safety-test.sh
-clients/host-monitor/packaging/macos/tests/postinstall-failure-test.sh
-clients/host-monitor/packaging/macos/tests/uninstall-proof-test.sh
+packaging/macos/tests/validate-packaging.sh
+packaging/macos/tests/smoke-pkg.sh
+packaging/macos/tests/account-safety-test.sh
+packaging/macos/tests/postinstall-failure-test.sh
+packaging/macos/tests/uninstall-proof-test.sh
 ```
 
 卸载脚本只删除能证明属于当前包的资源；不能用宽泛递归路径替代这些身份检查。

@@ -13,7 +13,7 @@ CI 验证，Windows `x86_64-pc-windows-msvc` Client 不因 Server 的单平台�
 rustup toolchain install 1.98.0
 cargo +1.98.0 metadata --no-deps
 cargo +1.98.0 check --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
-cd clients/web
+cd web
 npm ci
 npm run build
 ```
@@ -27,7 +27,7 @@ npm run build
 
 ```text
 HOST_MONITORING_DATABASE_URL=sqlite:///tmp/host-monitoring/app.db
-HOST_MONITORING_STATIC_DIR=/absolute/repository/clients/web/dist
+HOST_MONITORING_STATIC_DIR=/absolute/repository/web/dist
 HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME=admin
 HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD=<local-only-secret>
 HOST_MONITORING_DEVELOPMENT=true

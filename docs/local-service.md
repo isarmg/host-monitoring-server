@@ -7,7 +7,7 @@
 在仓库根执行：
 
 ```sh
-npm --prefix clients/web run build
+npm --prefix web run build
 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_BUILD_JOBS=2 HOST_MONITORING_SOURCE_REVISION=unbound cargo build --locked -p host-monitoring-server
 node scripts/local-service.mjs start
 node scripts/local-service.mjs status
@@ -20,4 +20,4 @@ node scripts/local-service.mjs stop
 已有数据库缺少原密钥时服务会拒绝启动，避免静默生成新密钥后导致现有授权码无法解密。
 数据库位于 `.runtime/local-service/db/host-monitoring.sqlite3`，日志位于
 `.runtime/local-service/server.log`。所有运行状态由 Git 忽略，重复启动复用原有数据库和凭据。
-重新构建二进制前先停止本服务；Web 静态资源由 `clients/web/dist` 提供。
+重新构建二进制前先停止本服务；Web 静态资源由 `web/dist` 提供。

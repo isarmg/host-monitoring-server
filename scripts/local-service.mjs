@@ -101,7 +101,7 @@ if (command === "stop") {
   Object.assign(env, {
     HOST_MONITORING_BIND: "127.0.0.1:18105", HOST_MONITORING_DEVELOPMENT: "true",
     HOST_MONITORING_DATABASE_URL: `sqlite://${databasePath}`,
-    HOST_MONITORING_STATIC_DIR: join(root, "clients/web/dist"),
+    HOST_MONITORING_STATIC_DIR: join(root, "web/dist"),
     HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME: credentials.username,
     HOST_MONITORING_BOOTSTRAP_ADMIN_PASSWORD: credentials.password,
     HOST_MONITORING_CLIENT_AUTHORIZATION_KEY: credentials.clientAuthorizationKey,

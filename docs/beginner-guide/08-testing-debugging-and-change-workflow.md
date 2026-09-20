@@ -16,7 +16,7 @@ cargo +1.98.0 fmt --all -- --check
 cargo +1.98.0 check --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
 cargo +1.98.0 clippy --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features -- -D warnings
 cargo +1.98.0 test --workspace --locked --target x86_64-unknown-linux-gnu
-cd clients/web
+cd web
 # Node 必须与仓库根 .node-version 的 26.7.0 一致
 npm ci
 npm run build

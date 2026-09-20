@@ -3,7 +3,7 @@
 管理 Web 已支持新建实例、查看每实例长期授权码、更换授权码、取消待配对实例和设备配对激活。授权码在服务端加密保存；更换后会撤销该实例的现有客户端凭据，客户端必须使用新码重新配对。
 使用说明见 [实例创建与配对](docs/instance-management.md)。
 
-本仓库只包含 Server、服务端管理 Web（`clients/web`）及唯一协议源码（`protocol`）。跨平台
+本仓库只包含 Server、服务端管理 Web（`web`）及唯一协议源码（`protocol`）。跨平台
 `host-monitor` 已拆到 [host-monitoring-client](https://github.com/isarmg/host-monitoring-client)。
 服务端使用本地管理员用户名/密码和 SQLite；Client 只读采集主机状态，通过配对取得凭据，并默认经 HTTPS 发送有界报告。
 正式 report/OTLP 与配对都要求 HTTPS；明文 HTTP 仅在 debug 构建允许 loopback 开发地址，release 构建拒绝。
@@ -32,7 +32,7 @@ identity 算法。Host Monitoring 仍独立拥有账户记录、登录准入、S
 ```text
 protocol/                  host-protocol：Client/Server 唯一共享 wire contract
 host-monitoring-server/    Axum 管理/Client API、SQLite 写入与保留策略
-clients/web/               React/Vite 管理 Web：管理员认证、实例、主机详情与配对
+web/                       React/Vite 管理 Web：管理员认证、实例、主机详情与配对
 config/                    可提交的当前配置样例；不存放生产 Secret
 deploy/                    Server 当前 systemd 源资产
 scripts/                   发行打包、manifest 和供应链门禁
@@ -47,7 +47,7 @@ cargo +1.98.0 fmt --all -- --check
 cargo +1.98.0 check --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
 cargo +1.98.0 clippy --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features -- -D warnings
 cargo +1.98.0 test --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
-(cd clients/web && npm ci && npm run build)
+(cd web && npm ci && npm run build)
 python3 scripts/check-workflow-supply-chain.py
 python3 scripts/test-server-release-tooling.py
 ```

@@ -3,7 +3,7 @@
 ## 10.1 三阶段阅读路线
 
 第一阶段读 `protocol` 的报告与配对类型、根 README 和流程树，能画出 Client 到 SQLite 的路径。第二阶段
-读 `clients/host-monitor/src` 的 config、pairing、collectors、spool、delivery。第三阶段读 Server auth、telemetry
+读 `host-monitoring-client/src` 的 config、pairing、collectors、spool、delivery。第三阶段读 Server auth、telemetry
 writer、retention、release 验证和 Web 调用。
 
 ## 10.2 按问题找入口

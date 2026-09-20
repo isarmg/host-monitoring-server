@@ -370,10 +370,10 @@ def main() -> None:
         for directory in [root / "bin", root / "systemd", web_stage]:
             directory.mkdir(parents=True, exist_ok=False)
 
-        run(["npm", "ci"], cwd=source / "clients/web")
+        run(["npm", "ci"], cwd=source / "web")
         run(
             ["npm", "run", "build", "--", "--outDir", os.fspath(web_stage), "--emptyOutDir"],
-            cwd=source / "clients/web",
+            cwd=source / "web",
         )
         if sorted(path.name for path in web_stage.iterdir()) != ["assets", "index.html"]:
             fail("Web build is not the exact current assets/index.html layout")

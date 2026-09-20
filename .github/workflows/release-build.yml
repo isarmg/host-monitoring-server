@@ -28,7 +28,7 @@ jobs:
           node-version: 26.7.0
           check-latest: false
       - name: Install locked Web dependencies
-        run: npm ci --prefix clients/web
+        run: npm ci --prefix web
       - name: Build and verify the immutable Server archive
         run: |
           mkdir -p "$RUNNER_TEMP/release-output"

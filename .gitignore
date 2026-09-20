@@ -16,6 +16,6 @@ Thumbs.db
 *.swp
 __pycache__/
 *.pyc
-clients/web/node_modules/
-clients/web/dist/
-clients/web/*.tsbuildinfo
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo

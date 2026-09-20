@@ -12,7 +12,7 @@ const lock = JSON.parse(
 const foundationPackages = ["admin-web", "admin-shell", "admin-ui", "contracts", "design-tokens", "http-client", "web-fonts", "web-toolchain"];
 
 const nodeVersion = readFileSync(
-  new URL("../../../.node-version", import.meta.url),
+  new URL("../../.node-version", import.meta.url),
   "utf8",
 );
 assert.match(nodeVersion, /^26\.7\.0\n?$/);
