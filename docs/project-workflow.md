@@ -28,9 +28,9 @@ Host Monitoring
 ## 2. Server 启动
 
 Server 进程只允许 `x86_64-unknown-linux-gnu` 构建，并在解析命令/配置前通过 `uname` 确认当前内核是
-Linux、机器是 x86_64。正式二进制要求 `--root` 是规范绝对的 `.../releases/0.9.22` 且当前 executable
+Linux、机器是 x86_64。正式二进制要求 `--root` 是规范绝对的 `.../releases/0.9.23` 且当前 executable
 就是该树的 `bin/host-monitoring-server`；systemd 提供的标准部署根固定为
-`/opt/isarmg/host-monitoring/releases/0.9.22`。随后验证 manifest、完整源码 revision、target、API、
+`/opt/isarmg/host-monitoring/releases/0.9.23`。随后验证 manifest、完整源码 revision、target、API、
 Schema、Web 文件集合/Hash/权限，再解析
 `HOST_MONITORING_*`。随后取得数据库 instance
 排他锁和 maintenance 共享锁；已有库先用独立只读连接验证 `product_metadata` 与实际
@@ -39,7 +39,7 @@ synchronous 的 SQLx pool，启动 writer/retention 和 HTTP listener。文件�
 只读预检和锁仍由产品负责；Foundation 不执行 migration 或初始化产品表。Host 数据库没有可供运维
 调用的 generation/journal API；不要把外部通用引擎的术语写成产品现有能力。
 
-当前数据库身份是 application `host-monitoring`、version `0.9.22`、schema revision `6`、SHA
+当前数据库身份是 application `host-monitoring`、version `0.9.20`、schema revision `6`、SHA
 `dc97f6526439673f7a633a15a2557e758e922bc49749f8b9562ee8ee3ed7048d`。`_sarmg_administrators` DDL 先用 CHECK/
 UNIQUE 约束 canonical username、非空 hash 和布尔 active；`serve`/`admin-create` 再用 Foundation
 primitive 检查已有 username 与完整 Argon2id 参数。`doctor` 检查 Schema/integrity/FK，但不做这项账户
@@ -121,7 +121,7 @@ writer 停止、总等待超时或写入失败返回 503；两者带 `Retry-Afte
 ```text
 build.rs 拒绝非 x86_64-unknown-linux-gnu
   -> 打包器确认 x86_64 glibc Linux 宿主
-  -> 干净且 annotated v0.9.22 tag == HEAD
+  -> 干净且 annotated v0.9.23 tag == HEAD
   -> npm ci + Web build
   -> 显式 target + source revision 绑定 Rust release build
   -> 严格全树 manifest

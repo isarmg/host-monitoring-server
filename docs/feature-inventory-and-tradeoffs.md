@@ -177,7 +177,7 @@
 
 ## 4. 当前版本与明确不做
 
-- Server 只接受 `0.9.22` 配置、数据库与发行身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
+- Server 只接受 `0.9.23` 配置与发行身份以及 `0.9.20` 数据库结构身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
 - 服务端只初始化不存在的当前库，拒绝 metadata-free、非当前 identity 和 Schema drift。
 - 产品不包含 migration、backup、restore；`sarmg-upgrade` 当前也没有 Host 转换边，所以这些操作暂不受支持。
 - Client 不执行远程 Shell、配置修改、补丁管理或自动修复。
