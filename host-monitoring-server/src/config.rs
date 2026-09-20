@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn immutable_release_commands_require_an_explicit_root() {
-        let root = "/opt/isarmg/host-monitoring/releases/0.9.21";
+        let root = "/opt/isarmg/host-monitoring/releases/0.9.22";
         assert!(
             Cli::try_parse_from(["host-monitoring-server", "serve-release", "--root", root])
                 .is_ok()
