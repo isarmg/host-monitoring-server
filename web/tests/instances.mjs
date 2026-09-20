@@ -8,6 +8,22 @@ const inviteId = "018f1f4b-7a5d-7b5f-8d31-123456789abc";
 const pairId = "018f1f4b-7a5d-7b5f-8d31-123456789abd";
 const instanceId = "018f1f4b-7a5d-7b5f-8d31-123456789abe";
 const code = "uci_" + "a".repeat(32);
+async function assertColumnContentAlignment(table) {
+  const offsets = await table.evaluate(element => {
+    const textStart = cell => {
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT); let text;
+      while ((text = walker.nextNode()) && !text.textContent.trim()) {}
+      if (!text) throw new Error("table cell has no visible text");
+      const range = document.createRange(); range.selectNodeContents(text);
+      return range.getBoundingClientRect().left;
+    };
+    const contentStart = cell => cell.firstElementChild?.getBoundingClientRect().left ?? textStart(cell);
+    const headings = [...element.querySelectorAll("thead th")], values = [...element.querySelector("tbody tr").children];
+    if (headings.length !== values.length) throw new Error("table column count mismatch");
+    return headings.map((heading, index) => Math.abs(textStart(heading) - contentStart(values[index])));
+  });
+  assert.ok(offsets.every(offset => offset < 0.5), `column content offsets: ${JSON.stringify(offsets)}`);
+}
 const server = await preview({ preview: { host: "127.0.0.1", port: 0, strictPort: true } });
 try {
   for (const engine of [chromium, firefox]) {
@@ -76,6 +92,7 @@ try {
       await expect(page.getByRole("cell").filter({ hasText: code })).toBeVisible();
       const instanceTable = page.getByRole("table", { name: "实例列表" });
       assert.ok((await instanceTable.locator("th, td").evaluateAll(elements => elements.map(element => getComputedStyle(element).textAlign))).every(value => value === "left"));
+      await assertColumnContentAlignment(instanceTable);
       assert.ok((await instanceTable.locator(".sarmg-actions").evaluateAll(elements => elements.map(element => getComputedStyle(element).justifyContent))).every(value => value === "flex-start"));
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);

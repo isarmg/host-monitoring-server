@@ -38,7 +38,7 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByLabel("配对码", { exact: true }).fill(code);
     await page.getByRole("button", { name: "确认设备并激活" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "选择实例 真实后端测试主机", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "选择实例 真实后端测试主机", exact: true })).toBeVisible();
     const poll = await fetch(`${base}/api/v2/host-monitor/pairing-requests/${pairing.request_id}/status`, { method: "POST", headers: { authorization: `Pairing ${polling}` } });
     assert.equal(poll.status, 200);
     assert.equal((await poll.json()).status, "active");
@@ -53,7 +53,7 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByRole("button", { name: "取消配对", exact: true }).click();
     await page.getByRole("button", { name: "确认", exact: true }).click();
     await expect(page.getByRole("cell", { name: "已取消", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "选择实例 真实后端测试主机", exact: true }).click();
+    await page.getByRole("link", { name: "选择实例 真实后端测试主机", exact: true }).click();
     await expect(page.getByRole("heading", { name: "真实后端测试主机", exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "详细信息与设置" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "最新设备信息", exact: true })).toBeVisible();
@@ -62,8 +62,8 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByRole("button", { name: "保存设置", exact: true }).click();
     await expect(page.getByRole("heading", { name: "修改后的监控实例", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "实例列表", exact: true }).click();
-    await expect(page.getByRole("button", { name: "选择实例 修改后的监控实例", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "选择实例 修改后的监控实例", exact: true }).click();
+    await expect(page.getByRole("link", { name: "选择实例 修改后的监控实例", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "选择实例 修改后的监控实例", exact: true }).click();
     await page.getByRole("button", { name: "切换到深色模式", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.getByRole("button", { name: "切换到浅色模式", exact: true }).click();
@@ -71,7 +71,7 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.screenshot({ path: "/tmp/host-instance-workspace.png", fullPage: true });
     await page.getByRole("button", { name: "删除实例", exact: true }).click();
     await page.getByRole("button", { name: "确认", exact: true }).click();
-    await expect(page.getByRole("button", { name: "选择实例 修改后的监控实例", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "选择实例 修改后的监控实例", exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
     console.log("Real Host backend: pairing/deep link/cancel/select/details/save/delete/theme toggle passed");
   } finally { await browser.close(); }

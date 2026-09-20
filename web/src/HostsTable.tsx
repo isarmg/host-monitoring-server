@@ -1,5 +1,5 @@
 import { t, getLocale } from "@sarmg/admin-ui/i18n";
-import { Button, EmptyState, Table } from "@sarmg/admin-ui";
+import { EmptyState, Table } from "@sarmg/admin-ui";
 import type { Host } from "./api";
 
 function percent(value: number | null) { return value === null ? t("未上报", "Not reported") : `${value.toFixed(1)}%`; }
@@ -13,7 +13,7 @@ export function HostsTable({ hosts, select }: { hosts: Host[]; select(id: string
     <th scope="col">{t("实例名称", "Instance name")}</th><th scope="col">{t("状态", "Status")}</th><th scope="col">{t("系统 / 架构", "System / architecture")}</th>
     <th scope="col">{t("CPU 使用率", "CPU usage")}</th><th scope="col">{t("内存使用率", "Memory usage")}</th><th scope="col">{t("最近连接", "Last connection")}</th><th scope="col">{t("最近上报", "Last report")}</th>
   </tr></thead><tbody>{hosts.map(host => <tr key={host.id}>
-    <th scope="row"><Button aria-label={t("选择实例 {0}", "Select instance {0}", [host.name])} onClick={() => select(host.id)}>{host.name}</Button></th>
+    <th scope="row"><a aria-label={t("选择实例 {0}", "Select instance {0}", [host.name])} href={`#details/${host.id}`} onClick={() => select(host.id)}>{host.name}</a></th>
     <td>{host.status === "online" ? t("在线", "Online") : host.status === "offline" ? t("离线", "Offline") : t("未知", "Unknown")}</td>
     <td>{host.os} / {host.arch}</td><td>{percent(host.cpu_usage_percent)}</td><td>{percent(host.memory_usage_percent)}</td>
     <td>{timestamp(host.last_seen_at)}</td><td>{host.latest_collected_at ? timestamp(host.latest_collected_at) : t("尚未上报", "Not yet reported")}</td>

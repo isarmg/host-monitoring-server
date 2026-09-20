@@ -100,7 +100,7 @@ try {
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       });
       await page.goto(`http://127.0.0.1:${address.port}`);
-      await page.getByRole("button", { name: "选择实例 Host-0", exact: true }).waitFor();
+      await page.getByRole("link", { name: "选择实例 Host-0", exact: true }).waitFor();
       await checkHeaderActions(page, "/monitoring/hosts");
       await page.locator("#statistics-heading").waitFor();
       const spacing = await page.evaluate(() => {
@@ -132,7 +132,7 @@ try {
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
       await page.getByRole("button", { name: "下一页", exact: true }).click();
       await expect(table.locator("tbody tr")).toHaveCount(1);
-      await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).click();
+      await page.getByRole("link", { name: "选择实例 Host-50", exact: true }).click();
       await expect.poll(() => detailActive).toBe(1);
       await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
@@ -169,7 +169,7 @@ try {
       await page.getByRole("button", { name: "删除实例", exact: true }).click();
       await page.getByRole("dialog", { name: "删除监控实例", exact: true }).getByRole("button", { name: "确认", exact: true }).click();
       await expect.poll(() => new URL(page.url()).hash).toBe("#instances");
-      await expect(page.getByRole("button", { name: "选择实例 Host-50", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "选择实例 Host-50", exact: true })).toHaveCount(0);
       await checkHeaderLogout(page, session.csrf_token);
       assert.deepEqual(errors, []);
       console.log(`${engine.name()}: current Host build, pagination, full details and mobile light/dark WCAG AA passed`);
