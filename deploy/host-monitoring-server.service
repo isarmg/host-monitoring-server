@@ -9,8 +9,8 @@ Type=simple
 User=isarmg-host
 Group=isarmg-host
 EnvironmentFile=/etc/isarmg/host-monitoring.env
-Environment=HOST_MONITORING_STATIC_DIR=/opt/isarmg/host-monitoring/releases/0.9.15/web
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.15/bin/host-monitoring-server serve-release --root /opt/isarmg/host-monitoring/releases/0.9.15
+Environment=HOST_MONITORING_STATIC_DIR=/opt/isarmg/host-monitoring/releases/0.9.16/web
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.16/bin/host-monitoring-server serve-release --root /opt/isarmg/host-monitoring/releases/0.9.16
 StateDirectory=isarmg/host-monitoring/db
 StateDirectoryMode=0700
 RuntimeDirectory=isarmg/host-monitoring

@@ -18,7 +18,7 @@ use std::os::unix::fs::OpenOptionsExt;
 pub const APPLICATION: &str = "host-monitoring";
 pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 // Persisted schema identity changes only with a data-format migration.
-pub const SCHEMA_APPLICATION_VERSION: &str = "0.9.15";
+pub const SCHEMA_APPLICATION_VERSION: &str = "0.9.16";
 pub const SCHEMA_REVISION: i64 = 6;
 pub const SCHEMA_SHA256: &str = "dc97f6526439673f7a633a15a2557e758e922bc49749f8b9562ee8ee3ed7048d";
 

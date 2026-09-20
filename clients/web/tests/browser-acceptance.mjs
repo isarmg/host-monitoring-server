@@ -27,6 +27,15 @@ function instance(index) {
     authorization_code: "uci_" + String(index).padStart(32, "0"),
   };
 }
+function aggregate(value) { return { count: value === null ? 0 : 1, min: value, max: value, avg: value }; }
+function bucket(start, cpu, memory) {
+  const absent = aggregate(null);
+  return { start, end: new Date(Date.parse(start) + 5_000).toISOString(), sample_count: 1,
+    cpu_usage_percent: aggregate(cpu), memory_usage_percent: aggregate(memory),
+    network_received_bytes_per_second: absent, network_transmitted_bytes_per_second: absent,
+    disk_read_bytes_per_second: absent, disk_written_bytes_per_second: absent,
+    max_temperature_celsius: absent, gpu_utilization_percent: absent, gpu_memory_usage_percent: absent };
+}
 const server = await preview({ preview: { host: "127.0.0.1", port: 0, strictPort: true } });
 const address = server.httpServer.address();
 assert.ok(address && typeof address === "object");
@@ -39,9 +48,11 @@ try {
       const errors = [];
       const requested = [];
       const instanceRequested = [];
+      let detailActive = 0, detailRequests = 0, maximumDetailActive = 0, historyRequests = 0, failNextHistory = false, deleted = false;
       page.on("pageerror", error => errors.push(error.message));
-      await page.route("**/api/v2/**", route => {
-        const url = new URL(route.request().url());
+      await page.route("**/api/v2/**", async route => {
+        const request = route.request();
+        const url = new URL(request.url());
         const offset = Number(url.searchParams.get("offset") ?? "0");
         const isHosts = url.pathname.endsWith("/monitoring/hosts");
         if (isHosts) requested.push(offset);
@@ -49,16 +60,31 @@ try {
         const historyMatch = /\/monitoring\/hosts\/([0-9a-f-]+)\/history$/.exec(url.pathname);
         let body;
         if (isHosts) {
-          body = { hosts: Array.from({ length: 51 }, (_, index) => host(index)), total: 51, limit: 1000, offset };
+          const hosts = Array.from({ length: 51 }, (_, index) => host(index)).filter(value => !deleted || value.id !== host(50).id);
+          body = { hosts, total: hosts.length, limit: 1000, offset };
         } else if (url.pathname.endsWith("/client-instances")) {
           instanceRequested.push(offset);
-          const indexes = Array.from({ length: Math.min(50, 51 - offset) }, (_, index) => offset + index);
-          body = { instances: indexes.map(instance), hosts: indexes.map(host), total: 51, limit: 50, offset };
+          const indexes = Array.from({ length: Math.min(50, 51 - offset) }, (_, index) => offset + index).filter(index => !deleted || index !== 50);
+          body = { instances: indexes.map(instance), hosts: indexes.map(host), total: deleted ? 50 : 51, limit: 50, offset };
         } else if (historyMatch) {
+          historyRequests++;
+          if (failNextHistory) {
+            failNextHistory = false;
+            return route.fulfill({ status: 503, json: { code: "service_unavailable", message: "SECRET history", retryable: true, request_id: "history-failure-123" } });
+          }
+          await new Promise(resolve => setTimeout(resolve, 2_500));
           body = { host_id: historyMatch[1], requested_from: "2026-09-03T23:00:00Z", requested_to: "2026-09-04T00:00:00Z",
-            actual_from: "2026-09-03T23:00:00Z", actual_to: "2026-09-04T00:00:00Z", step_seconds: 5, source: "raw", points: [] };
+            actual_from: "2026-09-03T23:00:00Z", actual_to: "2026-09-03T23:59:00Z", step_seconds: 5, source: "raw", points: [
+              bucket("2026-09-03T23:00:00Z", 10, 20), bucket("2026-09-03T23:01:00Z", 20, null), bucket("2026-09-03T23:59:00Z", 30, 40),
+            ] };
         } else if (detailMatch) {
+          detailRequests++; detailActive++; maximumDetailActive = Math.max(maximumDetailActive, detailActive);
+          await new Promise(resolve => setTimeout(resolve, 250));
+          detailActive--;
           body = { host: host(50), latest: null };
+        } else if (url.pathname.endsWith(`/monitoring/managed-instances/${host(50).id}`) && request.method() === "DELETE") {
+          deleted = true;
+          return route.fulfill({ status: 204 });
         } else {
           body = session;
         }
@@ -98,6 +124,8 @@ try {
       await page.getByRole("button", { name: "下一页", exact: true }).click();
       await expect(table.locator("tbody tr")).toHaveCount(1);
       await page.getByRole("button", { name: "选择实例 Host-50", exact: true }).click();
+      await expect.poll(() => detailActive).toBe(1);
+      await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.deepEqual([...new Set(requested)], [0]);
       assert.deepEqual([...new Set(instanceRequested)], [0, 50]);
@@ -105,6 +133,21 @@ try {
       await page.getByText("等待首次上报", { exact: true }).waitFor();
       await page.getByRole("heading", { name: "历史趋势", exact: true }).waitFor();
       await page.getByText("页面最近更新", { exact: true }).waitFor();
+      await expect.poll(() => detailRequests).toBeGreaterThanOrEqual(2);
+      assert.equal(maximumDetailActive, 1);
+      await expect.poll(() => historyRequests).toBeGreaterThanOrEqual(1);
+      const cpuPoints = page.getByRole("img", { name: "CPU 与内存使用率历史图" }).locator("polyline").first();
+      await expect(cpuPoints).toHaveAttribute("points", /0,90 1\.6666.*?,80 98\.3333.*?,70/);
+      await page.getByRole("button", { name: "暂停自动更新（2 秒）", exact: true }).click();
+      const beforeManualRefresh = detailRequests;
+      await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
+      await expect.poll(() => detailRequests).toBeGreaterThan(beforeManualRefresh);
+      failNextHistory = true;
+      await page.getByRole("button", { name: "24h", exact: true }).click();
+      await expect(page.getByRole("alert")).toContainText("history-failure-123");
+      await expect(page.locator("body")).not.toContainText("SECRET history");
+      await page.getByRole("alert").getByRole("button", { name: "重试", exact: true }).click();
+      await expect(page.getByRole("img", { name: "CPU 与内存使用率历史图" })).toBeVisible();
       for (const theme of ["light", "dark"]) {
         if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /切换到.*模式/ }).click();
         const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
@@ -113,6 +156,10 @@ try {
       }
       const selectedId = host(50).id;
       await checkWebLanguage(page, {"routes":[["instances","Instance list"],[`details/${selectedId}`,"Details"],[`logs/${selectedId}`,"Logs"]],"names":["验收主机","测试主机"]});
+      await page.getByRole("button", { name: "删除实例", exact: true }).click();
+      await page.getByRole("dialog", { name: "删除监控实例", exact: true }).getByRole("button", { name: "确认", exact: true }).click();
+      await expect.poll(() => new URL(page.url()).hash).toBe("#instances");
+      await expect(page.getByRole("button", { name: "选择实例 Host-50", exact: true })).toHaveCount(0);
       await checkHeaderLogout(page, session.csrf_token);
       assert.deepEqual(errors, []);
       console.log(`${engine.name()}: current Host build, pagination, full details and mobile light/dark WCAG AA passed`);

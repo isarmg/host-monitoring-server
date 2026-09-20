@@ -1,6 +1,6 @@
 # Host Monitoring 文档总览
 
-本目录描述当前 Server `0.9.15` 开发源码及跨端产品概念；独立 Client 实现和命令须在
+本目录描述当前 Server `0.9.16` 开发源码及跨端产品概念；独立 Client 实现和命令须在
 [host-monitoring-client](https://github.com/isarmg/host-monitoring-client) 仓库阅读和执行。
 事实优先级依次为协议类型和当前 Schema、运行时校验、测试、发行 manifest、
 本文档。更改版本身份、HTTP 路由、报告字段或安装布局时，应在同一提交中同步对应文档。

@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "host-monitoring-server"
-version = "0.9.15"
+version = "0.9.16"
 dependencies = [
  "anyhow",
  "axum",
@@ -838,7 +838,7 @@ dependencies = [
 
 [[package]]
 name = "host-protocol"
-version = "0.9.15"
+version = "0.9.16"
 dependencies = [
  "chrono",
  "serde",
