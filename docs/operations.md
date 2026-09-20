@@ -157,7 +157,7 @@ printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-passwor
 
 `admin-create` 从 `HOST_MONITORING_BOOTSTRAP_ADMIN_USERNAME/PASSWORD` 读取首个账户；若库已有账户，它
 只验证现有记录。`admin-reset-password` 接受 `--username`，从标准输入读取一行有界密码，先规范化 username，再写新的当前
-Argon2id hash；Schema trigger 同时提升 `session_version`、撤销该账户全部 Session 并删除其 CSRF 摘要。
+Argon2id hash；Foundation SQLite 更新事务同时提升 `session_version` 并撤销该账户全部 Session。
 两条管理员维护命令要求 maintenance 排他锁，因此应先停止运行实例。
 
 reset CLI 不从 argv 读取密码。不要把真实密码字面量写进可持久 Shell history、脚本、工单或日志。首次创建
@@ -201,14 +201,13 @@ NVML 采集通常需要按包内 `host-monitor-gpu.conf` 明确配置设备访�
 
 ## 7. Windows Client
 
-WiX 4 MSI 同时安装 Windows Service、Tray 和维护 helper。Tray 是用户交互外壳，Service 是持续采集
-主体；两者通过受保护本机控制通道通信。构建/验收使用：
+WiX 4 MSI 安装 Windows Service、交互式 `host-monitor` CLI 和 maintenance helper。Service 是持续采集
+主体；管理员在终端使用 CLI 完成配置与配对，并通过受保护本机通道读取运行状态。构建/验收使用：
 
 ```powershell
 packaging\windows\wix\build-msi.cmd 0.9.25 `
   target\x86_64-pc-windows-msvc\release\host-monitor.exe `
-  target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe `
-  target\x86_64-pc-windows-msvc\release\host-monitor-tray.exe
+  target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe
 powershell -File packaging\windows\tests\Test-WixAuthoring.ps1
 powershell -File packaging\windows\tests\Test-PeSubsystems.ps1
 ```
@@ -334,12 +333,11 @@ Report、OTLP 和创建/轮询/激活配对共用 Client Foundation HTTP 工厂�
 每次请求最多接受 16 个解析地址，验证后绑定实际连接。响应 Header/Body 各限 64 KiB，
 拒绝超限 Content-Length 和分块响应。系统/环境代理及重定向禁用；依赖环境代理的部署
 不能绕过这一规则，需使用可直接访问的 HTTPS 端点。明文 loopback HTTP 只允许 debug
-构建，release 连 localhost 也拒绝。配对失败不再回显任意响应正文。Windows 托盘健康
-探测也通过同一工厂的同步适配器：只发无凭据的 `GET /health/live`，不读取 ProgramData
-状态或服务身份，Header/Body 各限 16 KiB，要求当前版本且不回显远端不匹配版本字符串。
-解析和实际 HTTP 路径已纳入跨平台测试，不代表 Windows 原生 UI/安装器验收完成。
-同步适配器持有并回收工作线程与运行时；系统 DNS 解析本身不可强制取消，可能延迟
-运行时退出，因此当前不能把 4 秒 HTTP 预算写成所有故障下严格的 4 秒调用返回保证。
+构建，release 连 localhost 也拒绝。配对失败不再回显任意响应正文。显式
+`host-monitor doctor --network` 使用同一异步工厂，只向配置 origin 的 `GET /health/live`
+发送无凭据请求，不读取本地状态或服务身份；成功只证明当前 CLI 账户的网络与 TLS 信任上下文可达，
+不证明后台服务账户、配对身份或报告投递可用。解析和实际 HTTP 路径已纳入跨平台测试；系统 DNS
+解析本身不可强制取消，因此超时预算不能表述为所有解析器故障下严格的进程返回上限。
 
 `status` 和默认只读 `doctor` 的 `tls` 检查复用实际投递客户端构造：检查平台身份格式、
 密码配置、受保护的有界文件读取和证书解析，不读取投递凭据、不获取事务/投递锁、不创建

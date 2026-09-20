@@ -27,7 +27,7 @@ pub struct Cli {
 pub enum Command {
     /// Serve an unbound development build; source-bound release binaries reject this command.
     Serve,
-    /// Verify and serve the exact immutable Host Monitoring 0.7 release tree.
+    /// Verify and serve the exact immutable release tree for this binary version.
     ServeRelease(ReleaseRoot),
     /// Run a deployment health check against the configured instance.
     Doctor,
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn immutable_release_commands_require_an_explicit_root() {
-        let root = "/opt/isarmg/host-monitoring/releases/0.8.2";
+        let root = "/opt/isarmg/host-monitoring/releases/0.9.19";
         assert!(
             Cli::try_parse_from(["host-monitoring-server", "serve-release", "--root", root])
                 .is_ok()

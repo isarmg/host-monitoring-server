@@ -14,9 +14,9 @@ spool。
 
 ## 6.3 Windows Client
 
-Windows Service 承担长期采集，Tray 只负责用户配置与配对；维护 helper 处理受保护的服务/文件事务。
-三者必须使用正确 PE subsystem，不能用可见控制台进程冒充后台服务。WiX 安装失败必须回滚本次创建的
-文件、服务和权限。
+Windows Service 承担长期采集，交互配置与配对由管理员终端中的 `host-monitor` CLI 完成；维护 helper
+处理受保护的服务/文件事务。Service helper 使用 GUI subsystem 避免后台弹出控制台，交互 CLI 保持
+console subsystem。WiX 安装失败必须回滚本次创建的文件、服务和权限。
 
 ## 6.4 macOS Client
 
@@ -44,7 +44,7 @@ credential、Token、完整配置和可能敏感的主机数据不能进入日�
 | Client 平台 | 静态检查 | 生命周期检查 | 运行检查 |
 |---|---|---|---|
 | Linux | unit/nfpm/权限 | install/remove/purge | systemd、采集、投递 |
-| Windows | WiX authoring/PE | install/rollback/uninstall | Service、Tray、本机 IPC |
+| Windows | WiX authoring/PE | install/rollback/uninstall | Service、CLI、本机 IPC |
 | macOS | pkg/plist/script | install failure/uninstall safety | LaunchDaemon、日志轮转 |
 | Mobile | Rust target/API contract | 宿主工程集成 | 权限、后台调度由 App 验收；当前无稳定 C ABI/FFI 包装 |
 

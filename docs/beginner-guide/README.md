@@ -25,7 +25,7 @@ Host Monitoring 用一个本地控制面接收多台主机的 CPU、内存、磁
 “只读采集”表示 Client 不以监控为理由修改系统配置。安装器仍需要平台权限创建服务账户、安装服务和
 保护本地状态，因此运行时最小权限与安装时权限要分开理解。
 
-## 2. 三个核心 crate 与 Web
+## 2. 两个仓库中的核心组件
 
 ```text
 host-protocol
@@ -49,13 +49,13 @@ web
   └─ React/Vite 最小状态页：管理员认证与 Host 列表（Server 仅 x86_64 GNU/Linux）
 ```
 
-协议 crate 是唯一 wire contract，Server 和 Client 都通过 workspace path 使用它，不能复制一份 DTO
-到另一仓库或用网络 Git 依赖形成自依赖。
+协议 crate 是唯一 wire contract，位于 Server 仓库并由 Server workspace path 使用；独立 Client 仓库通过
+完整 Git revision 固定依赖它。不能在 Client 中复制一份 DTO，也不能让 Server 反向依赖 Client 源码。
 
 ## 3. 开发环境
 
-仓库固定 Rust `1.98.0`。服务端 Web 还需要其 lockfile 对应的 Node/npm。完整 workspace 命令只在
-x86_64 GNU/Linux 运行；Windows/macOS CI 保留并单独验证 Client：
+Server 仓库固定 Rust `1.98.0`。服务端 Web 还需要其 lockfile 对应的 Node/npm。完整 Server workspace
+命令只在 x86_64 GNU/Linux 运行；Client 的 Windows、Linux、macOS 与移动边界在独立仓库验证：
 
 ```bash
 rustup toolchain install 1.98.0
@@ -64,9 +64,8 @@ cargo +1.98.0 test --workspace --locked --target x86_64-unknown-linux-gnu
 cd web && npm ci && npm run build
 ```
 
-跨平台 Client 安装包需要额外工具：Linux nFPM 与 systemd 测试环境，Windows WiX 4/PowerShell，macOS
-`pkgbuild`、`productbuild` 与 `launchctl` 相关工具。普通业务修改不需要在单机上模拟全部平台，CI
-矩阵会在真实目标系统验证。
+构建跨平台 Client 安装包还需要进入独立 `host-monitoring-client` 仓库，并准备 Linux nFPM 与 systemd
+测试环境、Windows WiX 4/PowerShell 或 macOS `pkgbuild`、`productbuild` 与 `launchctl` 相关工具。
 
 ## 4. 启动开发服务端
 
@@ -95,8 +94,8 @@ Server trim ASCII whitespace、转 ASCII 小写后要求 3..64 字节 canonical 
 
 ## 5. 运行 Client 的学习顺序
 
-从 `config/host-monitor.json.example` 复制到受保护路径，修改服务端 HTTPS 地址和 state directory。
-常用命令：
+以下步骤在独立 `host-monitoring-client` 仓库中执行。从其 `config/host-monitor.json.example` 复制到受保护
+路径，修改服务端 HTTPS 地址和 state directory。常用命令：
 
 ```bash
 host-monitor probe --config /etc/host-monitor/config.json
@@ -117,8 +116,8 @@ host-monitor run --config /etc/host-monitor/config.json
 ## 6. 配对为什么分阶段
 
 管理员管理 API 先创建实例并得到该实例的长期 authorization code。Client 生成 bearer/polling secret，只把摘要
-随 pairing request 发送，并保存 pending。code 可由受信 Tray/Client 调用公开 activation 端点提交，也可由
-已登录管理员调用受保护 activation 端点提交；Server 在一个事务中绑定 invite、request、Host 与
+随 pairing request 发送，并保存 pending。code 可由 Client 调用 capability activation 端点提交，也可由
+已登录管理员在 React 页面中核对设备后通过受保护 activation 端点提交；Server 在一个事务中绑定 invite、request、Host 与
 credential。Client 轮询到 active 后原子写入状态，再切换 active binding。网络中断时恢复同一请求，不会
 静默生成另一套身份；明确替换未完成请求必须由用户确认。
 
