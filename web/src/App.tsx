@@ -2,7 +2,7 @@ import { t } from "@sarmg/admin-ui/i18n";
 import { createSarmgAdminApplication, errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import { EmptyState, ErrorState, LoadingState } from "@sarmg/admin-ui";
 import { useEffect, useState } from "react";
-import { CURRENT_API_PREFIX, administratorApi, isHostListResponse, isUuid, type HostListResponse } from "./api";
+import { CURRENT_API_PREFIX, administratorApi, isCreatedInstance, isHostListResponse, isUuid, type HostListResponse } from "./api";
 import { Instances } from "./Instances";
 import { HostDetails } from "./HostDetails";
 import { InstanceHeaderActions, InstancePageNavigation, type InstancePage } from "@sarmg/admin-shell";
@@ -13,12 +13,13 @@ function currentRoute(): { page: InstancePage; hostId: string | null } {
 }
 
 function HostsPage() {
-  const { client } = useAdminApplication();
+  const { client, notify } = useAdminApplication();
   const [response, setResponse] = useState<HostListResponse | null>(null);
   const [failure, setFailure] = useState<{ requestId?: string } | null>(null);
   const [generation, setGeneration] = useState(0);
   const [selected, setSelected] = useState<string | null>(() => currentRoute().hostId);
   const [creating, setCreating] = useState(false);
+  const [createFailure, setCreateFailure] = useState<{ requestId?: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState<InstancePage>(() => currentRoute().page);
   useEffect(() => {
@@ -28,13 +29,23 @@ function HostsPage() {
   useEffect(() => {
     const controller = new AbortController();
     setRefreshing(true); setFailure(null);
-    void client.request(`${CURRENT_API_PREFIX}/monitoring/hosts?limit=1000&offset=0`, isHostListResponse, { signal: controller.signal })
+    void client.request(`${CURRENT_API_PREFIX}/monitoring/hosts`, isHostListResponse, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setResponse(value); })
       .catch(error => { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); })
       .finally(() => { if (!controller.signal.aborted) setRefreshing(false); });
     return () => controller.abort();
   }, [client, generation]);
   const refresh = () => setGeneration(value => value + 1);
+  async function createInstance() {
+    if (creating) return;
+    setCreating(true); setCreateFailure(null); window.location.hash = "instances";
+    try {
+      await client.request("/api/v2/monitoring/client-instances", isCreatedInstance, { method: "POST", body: "{}" });
+      notify(t("实例已创建，密码可在列表中查看。", "Instance created. Its password is available in the list."));
+      refresh();
+    } catch (error) { setCreateFailure({ requestId: errorRequestId(error) }); }
+    finally { setCreating(false); }
+  }
   const removed = () => {
     setSelected(null);
     window.location.hash = "instances";
@@ -42,11 +53,12 @@ function HostsPage() {
   };
   const host = selected ? response?.hosts.find(item => item.id === selected) : response?.hosts[0];
   const hostId = selected ?? response?.hosts[0]?.id ?? null;
-  return <section id="hosts" className="sarmg-content-stack"><InstanceHeaderActions create={() => { window.location.hash = "instances"; setCreating(true); }} refresh={refresh} refreshing={refreshing} /><InstancePageNavigation page={page} detailsDisabled={!hostId} navigate={value => { window.location.hash = hostId && value !== "instances" ? `${value}/${hostId}` : value; }} /><h1 className="sarmg-visually-hidden">{t("主机监控", "Host monitoring")}</h1>
+  return <section id="hosts" className="sarmg-content-stack"><InstanceHeaderActions create={() => void createInstance()} refresh={refresh} refreshing={refreshing || creating} /><InstancePageNavigation page={page} detailsDisabled={!hostId} navigate={value => { window.location.hash = hostId && value !== "instances" ? `${value}/${hostId}` : value; }} /><h1 className="sarmg-visually-hidden">{t("主机监控", "Host monitoring")}</h1>
+      {createFailure && <ErrorState requestId={createFailure.requestId}>{t("实例未能创建，请刷新列表核对后重试。", "The instance could not be created. Refresh the list before retrying.")}</ErrorState>}
       {failure && <ErrorState requestId={failure.requestId} onRetry={refresh}>{t("无法加载主机列表", "Unable to load hosts")}</ErrorState>}
       <div className="sarmg-content-stack" hidden={page !== "instances"}>
       {response === null ? failure ? <EmptyState>{t("请重试加载实例列表", "Retry loading the instance list")}</EmptyState> : <LoadingState>{t("正在加载主机…", "Loading hosts…")}</LoadingState>
-        : <Instances creating={creating} closeCreate={() => setCreating(false)} refreshSignal={generation} statistics={response.statistics} hostsChanged={refresh} select={id => { setSelected(id); window.location.hash = `details/${id}`; }} />}
+        : <Instances refreshSignal={generation} statistics={response.statistics} hostsChanged={refresh} select={id => { setSelected(id); window.location.hash = `details/${id}`; }} />}
       </div>
       {page === "details" && <section className="sarmg-content-stack" aria-label={t("详细信息与设置", "Details and settings")}>
       {response === null ? failure ? <EmptyState>{t("请重试加载实例列表", "Retry loading the instance list")}</EmptyState> : <LoadingState>{t("正在加载主机…", "Loading hosts…")}</LoadingState>
@@ -60,5 +72,6 @@ export default createSarmgAdminApplication({
   product: { name: "Host Monitoring" },
   client: administratorApi,
   navigation: [],
+  loginLandingHref: "#instances",
   routes: <HostsPage />,
 });

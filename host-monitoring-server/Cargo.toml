@@ -19,6 +19,7 @@ clap = { version = "4", features = ["derive", "env"] }
 http-body-util = "0.1"
 mime = "0.3"
 rusqlite = { version = "0.32", features = ["bundled"] }
+rand.workspace = true
 rustix = { version = "1.1", features = ["fs", "process", "system"] }
 sarmg-admin-auth.workspace = true
 sarmg-admin-core.workspace = true

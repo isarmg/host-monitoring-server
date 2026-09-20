@@ -24,7 +24,7 @@ function instance(index) {
     display_name: "Host-" + index,
     status: "active",
     created_at: "2026-09-04T00:00:00Z",
-    authorization_code: "uci_" + String(index).padStart(32, "0"),
+    authorization_code: String(index).padStart(32, "0"),
   };
 }
 function aggregate(value) { return { count: value === null ? 0 : 1, min: value, max: value, avg: value }; }
@@ -62,19 +62,18 @@ try {
       await page.route("**/api/v2/**", async route => {
         const request = route.request();
         const url = new URL(request.url());
-        const offset = Number(url.searchParams.get("offset") ?? "0");
         const isHosts = url.pathname.endsWith("/monitoring/hosts");
-        if (isHosts) requested.push(offset);
+        if (isHosts) requested.push(url.search);
         const detailMatch = /\/monitoring\/hosts\/([0-9a-f-]+)$/.exec(url.pathname);
         const historyMatch = /\/monitoring\/hosts\/([0-9a-f-]+)\/history$/.exec(url.pathname);
         let body;
         if (isHosts) {
           const hosts = Array.from({ length: 51 }, (_, index) => host(index)).filter(value => !deleted || value.id !== host(50).id);
-          body = { hosts, statistics: { total: { total: hosts.length, online: 0 }, windows: { total: 0, online: 0 }, linux: { total: hosts.length, online: 0 }, macos: { total: 0, online: 0 } }, total: hosts.length, limit: 1000, offset };
+          body = { hosts, statistics: { total: { total: hosts.length, online: 0 }, windows: { total: 0, online: 0 }, linux: { total: hosts.length, online: 0 }, macos: { total: 0, online: 0 } } };
         } else if (url.pathname.endsWith("/client-instances")) {
-          instanceRequested.push(offset);
-          const indexes = Array.from({ length: Math.min(50, 51 - offset) }, (_, index) => offset + index).filter(index => !deleted || index !== 50);
-          body = { instances: indexes.map(instance), hosts: indexes.map(host), total: deleted ? 50 : 51, limit: 50, offset };
+          instanceRequested.push(url.search);
+          const indexes = Array.from({ length: 51 }, (_, index) => index).filter(index => !deleted || index !== 50);
+          body = { instances: indexes.map(instance), hosts: indexes.map(host) };
         } else if (historyMatch) {
           historyRequests++;
           if (failNextHistory) {
@@ -119,25 +118,24 @@ try {
       await expect(page.getByRole("button", { name: "实例列表", exact: true })).toHaveAttribute("aria-pressed", "true");
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
       const table = page.getByRole("table", { name: "实例列表" });
-      await expect(table.locator("tbody tr")).toHaveCount(50);
-      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["名称", "配对状态", "在线状态", "系统 / 架构", "授权码", "操作", "删除"]);
+      await expect(table.locator("tbody tr")).toHaveCount(51);
+      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["账户名", "账户", "密码", "配对状态", "在线状态", "系统 / 架构", "操作", "删除"]);
       const cells = table.locator("tbody tr").first().locator("td");
-      assert.deepEqual((await cells.allTextContents()).slice(0, 3), ["已配对", "在线", "linux / x86_64"]);
-      await expect(cells.nth(3).locator("code")).toHaveText("uci_00000000000000000000000000000000");
-      await expect(cells.nth(3).getByRole("button", { name: "复制", exact: true })).toHaveCount(0);
+      assert.deepEqual((await cells.allTextContents()).slice(2, 5), ["已配对", "在线", "linux / x86_64"]);
+      await expect(cells.nth(0).locator("code")).toHaveText(host(0).id);
+      await expect(cells.nth(1).locator("code")).toHaveText("00000000000000000000000000000000");
+      await expect(cells.nth(1).getByRole("button", { name: "复制", exact: true })).toHaveCount(0);
       assert.equal(await table.locator("tbody tr").first().evaluate(row => getComputedStyle(row).display), "table-row");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
       assert.equal(await page.getByRole("complementary").count(), 0);
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
-      await page.getByRole("button", { name: "下一页", exact: true }).click();
-      await expect(table.locator("tbody tr")).toHaveCount(1);
       await page.getByRole("link", { name: "选择实例 Host-50", exact: true }).click();
       await expect.poll(() => detailActive).toBe(1);
       await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
-      assert.deepEqual([...new Set(requested)], [0]);
-      assert.deepEqual([...new Set(instanceRequested)], [0, 50]);
+      assert.deepEqual([...new Set(requested)], [""]);
+      assert.deepEqual([...new Set(instanceRequested)], [""]);
       await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
       await page.getByText("16.0 GiB", { exact: true }).waitFor();
       await expect(page.locator("pre")).toHaveCount(0);
@@ -172,7 +170,7 @@ try {
       await expect(page.getByRole("link", { name: "选择实例 Host-50", exact: true })).toHaveCount(0);
       await checkHeaderLogout(page, session.csrf_token);
       assert.deepEqual(errors, []);
-      console.log(`${engine.name()}: current Host build, pagination, full details and mobile light/dark WCAG AA passed`);
+      console.log(`${engine.name()}: current Host build, complete ordered list, full details and mobile light/dark WCAG AA passed`);
       await context.close();
     } finally { await browser.close(); }
   }

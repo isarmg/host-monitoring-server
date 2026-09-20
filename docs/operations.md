@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.20/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.21/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.20/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.20
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.21/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.21
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.20/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.20` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.21` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -36,7 +36,7 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 Foundation 0.8.5 / `0d5c100332f8e57229ead2f70eeccc19bfb44ed7`，八个 Web 包使用
+当前 Server Rust 固定 Foundation 0.8.8 / `946bbb5f4bf3e06d421b6f463bd637b83617a5be`，八个 Web 包使用
 同版正式 Release tarball 与 SHA-512 integrity，无相邻 Foundation 路径依赖；独立 CI 已通过，
 见[消费者矩阵](https://github.com/isarmg/sarmg-foundation-server/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护，诊断管理功能已移除。
@@ -44,11 +44,11 @@ React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session
 Foundation 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
 SQLite reopen 与 Router→Client 合同测试；不保留旧版本 fallback。
 
-当前 React 管理台以实例列表和实例详情为主线：列表提供有界分页、同页监控摘要、长期授权码和
+当前 React 管理台以实例列表和实例详情为主线：列表提供完整实例集合、同页监控摘要、长期授权码和
 新建实例；创建成功后窗口立即关闭。详情每两秒自动读取同一快照的完整最新报告，页面隐藏或暂停时停止轮询，
 并提供 15 分钟至 30 天的有界自动粒度趋势。授权码轮换会撤销旧 Client credential，客户端必须重新配对。
 当前仍没有 audit 查询界面，也不保存逐设备历史。
-`cd web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 分页、指标详情、移动主题与 WCAG AA 验收；
+`cd web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 实例列表、指标详情、移动主题与 WCAG AA 验收；
 首次运行需 `npx playwright install --with-deps chromium firefox`。该测试的 API 全部由本机测试数据拦截，不访问真实 Client。
 
 ## 3. Server 配置
@@ -103,11 +103,11 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 | `POST /api/v2/auth/login` | 浏览器公开入口 | 16 KiB；exact `{username,password}`；同源；TCP peer 与规范 username 双重限流 | `200` + exact Session；设置 Cookie；不知道账户时仍做 dummy Argon2；成功响应 `no-store` |
 | `GET /api/v2/auth/session` | 管理员 Session Cookie | 不接受业务正文；不要求 CSRF | 轮换一个 CSRF token 并返回 exact Session；成功响应 `no-store` |
 | `POST /api/v2/auth/logout` | 管理员 Session + CSRF + 同源 | 无业务正文 | 撤销当前 Session、删除其 CSRF 摘要、清除 Cookie；成功响应 `204 no-store` |
-| `GET /api/v2/monitoring/hosts` | 管理员 Session | query 只有 `limit/offset`；服务端钳到 1..1000，默认 200 | 分页 Host summary；React 总览与实例/详情入口共同使用 |
+| `GET /api/v2/monitoring/hosts` | 管理员 Session | 无查询参数 | 按实例名称字母数字顺序返回全部 Host summary；React 总览与实例/详情入口共同使用 |
 | `GET /api/v2/monitoring/hosts/{host_id}` | 管理员 Session | canonical UUID | Host summary 与可空 latest 原始报告；当前 Web 详情使用列表中的同一投影，端点供独立调用方精确读取 |
 | `GET /api/v2/monitoring/hosts/{host_id}/history` | 管理员 Session | 原始模式使用 `from/to/limit`；图表模式使用 `from/to/resolution=auto/max_points`，跨度最多 31 天、点数 100..1000 | 原始点，或在同一快照内无重复合并 raw 与 hourly 的时间桶；响应明确粒度、来源和实际对齐范围 |
-| `GET/POST /api/v2/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，授权码不设有效期 | 列表最多 200 条并返回可查看的实例授权码；新建 `201`；成功响应 `no-store` |
-| `PUT /api/v2/monitoring/client-instances/{request_id}/authorization` | 管理员 Session + CSRF + 同源 | canonical UUID；exact `authorization_code`，当前 `uci_` 格式 | 更新加密密文/摘要、撤销旧 Client credential，并将实例恢复为 pending；Client 需重新配对 |
+| `GET/POST /api/v2/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，省略时使用默认名称；授权码不设有效期 | 返回完整实例列表和可查看的实例授权码；新建 `201`；成功响应 `no-store` |
+| `PUT /api/v2/monitoring/client-instances/{request_id}/authorization` | 管理员 Session + CSRF + 同源 | canonical UUID；exact `authorization_code`，32 位小写英文字母或数字 | 更新加密密文/摘要、撤销旧 Client credential，并将实例恢复为 pending；Client 需重新配对 |
 | `DELETE /api/v2/monitoring/client-instances/{request_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；pending 首次调用转 cancelled，cancelled 再次调用永久删除 | `204`；不存在为 404，active 为 409；Web 分别显示“取消配对”和“删除实例” |
 | `POST /api/v2/host-monitor/activate-admin` | 管理员 Session + CSRF + 同源 | 16 KiB 管理上限；exact request ID + activation code | 与 capability 激活进入同一事务；React 配对确认流程调用 |
 | `PATCH/DELETE /api/v2/monitoring/managed-instances/{host_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；PATCH remark trim 后 1..255 UTF-8 bytes | `204`；PATCH 是 last-write-wins，无 ETag/revision；DELETE 永久级联删除且没有产品内恢复 |
@@ -148,7 +148,7 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.20
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.21
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-password \
@@ -246,7 +246,7 @@ notarization/stapling，并保存签名者、时间戳、摘要和验证结果�
 
 ## 9. 数据库身份与当前不支持的数据操作
 
-Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、格式版本 `0.9.20`、
+Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、格式版本 `0.9.21`、
 schema revision `6` 与 SHA-256
 `dc97f6526439673f7a633a15a2557e758e922bc49749f8b9562ee8ee3ed7048d`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
 必须一致。当前 DDL 中管理员列是 `_sarmg_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical

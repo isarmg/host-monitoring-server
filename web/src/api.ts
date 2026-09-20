@@ -93,9 +93,6 @@ export type Host = {
 export type HostListResponse = {
   hosts: Host[];
   statistics: HostStatistics;
-  total: number;
-  limit: number;
-  offset: number;
 };
 export type HostCount = { total: number; online: number };
 export type HostStatistics = { total: HostCount; windows: HostCount; linux: HostCount; macos: HostCount };
@@ -142,15 +139,12 @@ const CAPABILITY_ERROR_KINDS = new Set([
 ]);
 
 export function isHostListResponse(value: unknown): value is HostListResponse {
-  if (!isRecordWithExactKeys(value, ["hosts", "statistics", "total", "limit", "offset"])) {
+  if (!isRecordWithExactKeys(value, ["hosts", "statistics"])) {
     return false;
   }
   return (
     Array.isArray(value.hosts) &&
-    value.hosts.every(isHost) && isHostStatistics(value.statistics) &&
-    isNonNegativeSafeInteger(value.total) &&
-    isPositiveSafeInteger(value.limit) &&
-    isNonNegativeSafeInteger(value.offset)
+    value.hosts.every(isHost) && isHostStatistics(value.statistics)
   );
 }
 
@@ -328,31 +322,27 @@ export type CreatedInstance = ClientInstance & { activation_code: string };
 export type ClientInstanceListResponse = {
   instances: ClientInstance[];
   hosts: Host[];
-  total: number;
-  limit: number;
-  offset: number;
 };
 const INSTANCE_KEYS = ["request_id", "instance_id", "display_name", "status", "created_at", "authorization_code"];
+const isAuthorizationCode = (value: unknown): value is string => typeof value === "string"
+  && (/^[a-z0-9]{32}$/.test(value) || /^uci_[0-9a-f]{32}$/.test(value));
 function instanceFields(value: Record<string, unknown>): boolean {
   return isUuid(value.request_id) && isUuid(value.instance_id) && isText(value.display_name)
     && ["pending", "active", "cancelled"].includes(String(value.status))
-    && isUtcTimestamp(value.created_at) && typeof value.authorization_code === "string"
-    && /^uci_[0-9a-f]{32}$/.test(value.authorization_code);
+    && isUtcTimestamp(value.created_at) && isAuthorizationCode(value.authorization_code);
 }
 export function isInstances(value: unknown): value is ClientInstanceListResponse {
-  return isRecordWithExactKeys(value, ["instances", "hosts", "total", "limit", "offset"])
-    && Array.isArray(value.instances) && value.instances.length <= 100
+  return isRecordWithExactKeys(value, ["instances", "hosts"])
+    && Array.isArray(value.instances)
     && value.instances.every(item => isRecordWithExactKeys(item, INSTANCE_KEYS) && instanceFields(item))
-    && Array.isArray(value.hosts) && value.hosts.length <= value.instances.length && value.hosts.every(isHost)
-    && isNonNegativeSafeInteger(value.total) && isPositiveSafeInteger(value.limit)
-    && value.limit <= 100 && isNonNegativeSafeInteger(value.offset);
+    && Array.isArray(value.hosts) && value.hosts.length <= value.instances.length && value.hosts.every(isHost);
 }
 export function isInstance(value: unknown): value is ClientInstance {
   return isRecordWithExactKeys(value, INSTANCE_KEYS) && instanceFields(value);
 }
 export function isCreatedInstance(value: unknown): value is CreatedInstance {
   return isRecordWithExactKeys(value, [...INSTANCE_KEYS, "activation_code"]) && instanceFields(value)
-    && value.status === "pending" && typeof value.activation_code === "string" && /^uci_[0-9a-f]{32}$/.test(value.activation_code);
+    && value.status === "pending" && typeof value.activation_code === "string" && /^[a-z0-9]{32}$/.test(value.activation_code);
 }
 export type PairingSummary = { request_id: string; os: string; arch: string; client_version: string; status: "waiting" | "active" | "denied" | "expired"; expires_at: string };
 export function isPairingSummary(value: unknown): value is PairingSummary {

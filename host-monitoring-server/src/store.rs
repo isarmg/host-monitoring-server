@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use host_protocol::{
     Capability, ClientPairingMode, ClientPairingRequest, ClientReport, PairingStatus,
 };
+use rand::RngCore;
 use sarmg_admin_core::AdministratorStore;
 use sqlx::{Acquire, FromRow, Row, Sqlite, SqlitePool, Transaction, types::Json};
 use uuid::Uuid;
@@ -122,7 +123,7 @@ pub async fn create_invite(
 ) -> anyhow::Result<(CreateInviteResult, Option<String>)> {
     let invite_id = Uuid::new_v4();
     let instance_id = Uuid::new_v4();
-    let activation_code = format!("uci_{}", Uuid::new_v4().simple());
+    let activation_code = random_authorization_code();
     let activation_hash = crate::token_hash(&activation_code);
     let authorization_code_enc = secrets.encrypt(instance_id, &activation_code)?;
     let created_at = Utc::now();
@@ -164,20 +165,13 @@ pub async fn create_invite(
 pub async fn list_invites(
     pool: &SqlitePool,
     secrets: &crate::crypto::SecretBox,
-    limit: i64,
-    offset: i64,
-) -> anyhow::Result<(Vec<ClientInstanceSummary>, Vec<HostSummary>, i64)> {
+) -> anyhow::Result<(Vec<ClientInstanceSummary>, Vec<HostSummary>)> {
     let mut tx = pool.begin().await?;
-    let total = sqlx::query_scalar("SELECT count(*) FROM client_instance_invites")
-        .fetch_one(&mut *tx)
-        .await?;
     let rows = sqlx::query(
         r#"SELECT invite_id,instance_id,display_name,created_at,status,authorization_code_enc
            FROM client_instance_invites
-           ORDER BY created_at DESC,invite_id DESC LIMIT ? OFFSET ?"#,
+           ORDER BY display_name COLLATE NOCASE,display_name,instance_id"#,
     )
-    .bind(limit)
-    .bind(offset)
     .fetch_all(&mut *tx)
     .await?;
     let instances = rows
@@ -192,7 +186,7 @@ pub async fn list_invites(
         for instance in &instances {
             ids.push_bind(Uuid::parse_str(&instance.instance_id)?);
         }
-        ids.push_unseparated(") ORDER BY h.registered_at,h.host_id");
+        ids.push_unseparated(") ORDER BY h.name COLLATE NOCASE,h.name,h.host_id");
         hosts = query
             .build_query_as::<HostRow>()
             .fetch_all(&mut *tx)
@@ -202,7 +196,43 @@ pub async fn list_invites(
             .collect();
     }
     tx.commit().await?;
-    Ok((instances, hosts, total))
+    Ok((instances, hosts))
+}
+
+fn random_authorization_code() -> String {
+    const ALPHABET: &[u8; 36] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut value = String::with_capacity(32);
+    let mut bytes = [0_u8; 64];
+    while value.len() < 32 {
+        rand::rngs::OsRng.fill_bytes(&mut bytes);
+        for byte in bytes {
+            if byte < 252 {
+                value.push(ALPHABET[usize::from(byte % 36)] as char);
+                if value.len() == 32 {
+                    break;
+                }
+            }
+        }
+    }
+    value
+}
+
+#[cfg(test)]
+mod authorization_code_tests {
+    use super::*;
+
+    #[test]
+    fn generated_authorization_codes_have_the_shared_format() {
+        for _ in 0..64 {
+            let value = random_authorization_code();
+            assert_eq!(value.len(), 32);
+            assert!(
+                value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || byte.is_ascii_lowercase())
+            );
+        }
+    }
 }
 
 pub async fn validate_invite_authorizations(
@@ -221,7 +251,7 @@ pub async fn validate_invite_authorizations(
             instance_id,
             &row.try_get::<Vec<u8>, _>("authorization_code_enc")?,
         )?;
-        crate::model::validate_activation_code(&code)
+        crate::model::validate_stored_activation_code(&code)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
         anyhow::ensure!(
             row.try_get::<String, _>("activation_code_hash")? == crate::token_hash(&code),
@@ -1014,26 +1044,12 @@ fn summarize(row: HostRow) -> HostSummary {
     }
 }
 
-pub async fn list_hosts(
-    pool: &SqlitePool,
-    limit: i64,
-    offset: i64,
-) -> anyhow::Result<(Vec<HostSummary>, i64)> {
-    let mut tx = pool.begin().await?;
-    let total: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM monitored_hosts WHERE lifecycle_status='active'")
-            .fetch_one(&mut *tx)
-            .await?;
+pub async fn list_hosts(pool: &SqlitePool) -> anyhow::Result<Vec<HostSummary>> {
     let sql = format!(
-        "{HOST_SELECT} WHERE h.lifecycle_status='active' ORDER BY h.registered_at,h.host_id LIMIT ? OFFSET ?"
+        "{HOST_SELECT} WHERE h.lifecycle_status='active' ORDER BY h.name COLLATE NOCASE,h.name,h.host_id"
     );
-    let rows: Vec<HostRow> = sqlx::query_as(&sql)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&mut *tx)
-        .await?;
-    tx.commit().await?;
-    Ok((rows.into_iter().map(summarize).collect(), total))
+    let rows: Vec<HostRow> = sqlx::query_as(&sql).fetch_all(pool).await?;
+    Ok(rows.into_iter().map(summarize).collect())
 }
 
 pub async fn host_statistics(pool: &SqlitePool) -> anyhow::Result<HostStatistics> {

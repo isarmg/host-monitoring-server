@@ -34,7 +34,7 @@
 | HOST-023 | `/api/v2/host-monitor` 唯一 Client/API 合同 | Server router、protocol crate、client | 核心 | 高 | Client 与 Server 无稳定交互；alias 会扩大攻击与测试面 | current path、其他 path 404、unknown field |
 | HOST-024 | Server ingest 严格验证和事务写入 | telemetry writer、SQLite | 核心 | 高 | 不可信 Client 数据可污染库或整批丢失 | size、单位、timestamp、rollback |
 | HOST-025 | 数据保留与有界清理 | retention config、maintenance task | 保障 | 中 | 数据库无限增长；删得过激则趋势数据消失 | 时间边界、批量、锁竞争 |
-| HOST-026 | 管理 API 提供实例/Host 分页、同快照 latest 详情、raw 原始历史及 raw/hourly 有界聚合历史 | `http.rs::{list_instances,list_hosts,host_detail,host_history}`、`store.rs::{list_invites,list_hosts,get_host,history,history_series}` | 核心 | 高 | 采集虽仍落库，但管理员无法读取当前状态或长期趋势 | 稳定分页、from/to、点数/跨度预算、raw/hourly 无重复、权限 |
+| HOST-026 | 管理 API 按名称稳定排序并提供全部实例与 Host、同快照 latest 详情、raw 原始历史及 raw/hourly 有界聚合历史 | `http.rs::{list_instances,list_hosts,host_detail,host_history}`、`store.rs::{list_invites,list_hosts,get_host,history,history_series}` | 核心 | 高 | 采集虽仍落库，但管理员无法读取当前状态或长期趋势 | 完整有序实例列表、from/to、点数/跨度预算、raw/hourly 无重复、权限 |
 | HOST-027 | React/Vite 管理页：登录/恢复/登出、实例与配对、Host 列表/详情、历史趋势 | `web/src/{App,Instances,HostDetails,HostHistory}.tsx`、`api.ts`、Foundation admin hook/Vite/TS baseline | 建议保留 | 中 | API 保留，但仓库没有任何内置浏览器管理与趋势视图；删除不影响 Client 摄取 | 精确工具链、clean build、auth、响应 guard、退出清空、实例/配对与历史浏览器测试 |
 | HOST-028 | SQLite 当前 Schema identity/doctor | 产品文件预检/DDL/锁、`sarmg-sqlite`、`sarmg-schema-identity` | 保障 | 高 | 错库/漂移库可被误用 | wrong SHA/version、sidecar、corruption、连接 PRAGMA |
 | HOST-029 | Server 单实例和 maintenance lock | runtime lock、数据库锁 | 保障 | 高 | 双 Server 可重复清理/写入并破坏一致性 | 双启动、维护冲突 |
@@ -43,7 +43,7 @@
 | HOST-032 | CI Rust/Web/protocol/supply-chain 门禁 | `.github/workflows/ci.yml` | 开发运维 | 中 | 跨组件合同漂移无法提前发现 | clean checkout 全门禁 |
 | HOST-033 | 中文学习、流程、功能和运维文档 | README、`docs/` | 开发运维 | 低 | 开发者难以理解跨平台边界 | 链接和命令抽查 |
 | HOST-034 | 明确不做远程执行、配置下发和多版本 Client 协商 | 不存在对应 route/command | 核心 | 高 | 新增会把只读遥测 Client 变成远控系统并扩大威胁面 | 独立威胁模型与协议设计 |
-| HOST-035 | Server 共享原语固定 Foundation `=0.8.5` + 完整 revision `0d5c100332f8e57229ead2f70eeccc19bfb44ed7`；八个 Web 包固定同版 Release URL + lock integrity；Client 使用独立上游 | 根 `Cargo.toml`、`web/{package.json,package-lock.json}`、Foundation 门禁 | 保障 | 高 | 认证、构建及 SQLite 基线漂移；sibling/path 会破坏独立 checkout | Foundation 合同、完整 rev/八个 URL/integrity、Router→Client、Web clean build、SQLite reopen |
+| HOST-035 | Server 共享原语固定 Foundation `=0.8.8` + 完整 revision `946bbb5f4bf3e06d421b6f463bd637b83617a5be`；八个 Web 包固定同版 Release URL + lock integrity；Client 使用独立上游 | 根 `Cargo.toml`、`web/{package.json,package-lock.json}`、Foundation 门禁 | 保障 | 高 | 认证、构建及 SQLite 基线漂移；sibling/path 会破坏独立 checkout | Foundation 合同、完整 rev/八个 URL/integrity、Router→Client、Web clean build、SQLite reopen |
 | HOST-036 | Server 仅 x86_64 GNU/Linux 的三层平台门禁 | `build.rs`、启动 `uname`、release script/CI | 保障 | 中 | 意外产生或运行未支持的 ARM/musl/Windows/macOS Server | 非目标编译拒绝、打包宿主拒绝、运行身份检查 |
 | HOST-037 | 管理 role 只有 `admin`；数据库不存 role 列，`admin` 只是默认 username | `sarmg-contracts::AdministratorRole/AdministratorSession`、`schema/generated/current_schema.sql::_sarmg_administrators` | 核心 | 中 | 加回角色会扩大授权矩阵并使各产品管理语义重新分叉；把默认 username 当唯一 identity 会错误拒绝合法管理员名 | schema 列检查、响应 exact-shape、非 `admin` role 拒绝、其他 canonical username 正例 |
 | HOST-038 | 管理员 username 使用 Foundation 唯一 current 规范化：candidate 1..64 printable ASCII，trim ASCII + lowercase 后 canonical 3..64、首尾字母数字、字符 `[a-z0-9._-]`、禁止 `@` | `sarmg-admin-auth::{normalize_administrator_username,require_canonical_administrator_username}`、`store::normalize_username`、`_sarmg_administrators.username` | 保障 | 中 | 大小写/空白别名会拆分限流和唯一约束；放入 email 语义会重新引入跨产品身份分叉 | ` Admin `→`admin`，内部空格/`@`/非 ASCII/首尾分隔符/过短过长拒绝，相邻分隔符允许，启动存量扫描 |
@@ -177,7 +177,7 @@
 
 ## 4. 当前版本与明确不做
 
-- Server 只接受 `0.9.20` 配置、数据库与发行身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
+- Server 只接受 `0.9.21` 配置、数据库与发行身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
 - 服务端只初始化不存在的当前库，拒绝 metadata-free、非当前 identity 和 Schema drift。
 - 产品不包含 migration、backup、restore；`sarmg-upgrade` 当前也没有 Host 转换边，所以这些操作暂不受支持。
 - Client 不执行远程 Shell、配置修改、补丁管理或自动修复。
@@ -295,7 +295,7 @@ Token 是敏感数据。管理员操作和遥测不应记录 Secret。只有当�
 | 移动常驻 daemon | 不提供 | 不符合 Android/iOS 后台模型 |
 | 多版本 Client API alias | 不提供 | 扩大协议和安全测试矩阵 |
 | 自动硬件告警规则 | 当前不提供 | 需明确规则状态、抑制、通知和时钟语义 |
-| 通用审计管理台 | 当前不提供 | 当前 React 已覆盖实例分页、配对、完整最新详情、自动更新、趋势、备注和删除；审计查询仍需单独合同 |
+| 通用审计管理台 | 当前不提供 | 当前 React 已覆盖完整有序实例列表、配对、完整最新详情、自动更新、趋势、备注和删除；审计查询仍需单独合同 |
 | audit 查询/导出 | 当前不提供 | 只有事务写入；需定义授权、保留、脱敏、分页与完整性证据 |
 | 同 ID 正文 fingerprint | 当前不提供 | 现在同 Host 同 report ID 不比较正文；若要检测错误重放，需新增规范编码/hash、列和冲突合同 |
 

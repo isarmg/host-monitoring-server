@@ -1,19 +1,24 @@
 import { displayLabel } from "./display-labels";
 import { t, getLocale } from "@sarmg/admin-ui/i18n";
-import { InstanceNameField } from "@sarmg/admin-shell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button, Dialog, ErrorState, FormField, TextField, Table, EmptyState, LoadingState, ConfirmDangerDialog } from "@sarmg/admin-ui";
 import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
-import { isActivation, isCreatedInstance, isInstance, isInstances, isNoContent, isPairingSummary, isUuid,
+import { isActivation, isInstance, isInstances, isNoContent, isPairingSummary, isUuid,
   type ClientInstance, type ClientInstanceListResponse, type HostStatistics, type PairingSummary } from "./api";
-import type { CreatedInstance } from "./api";
 
 const instancesPath = "/api/v2/monitoring/client-instances";
 const labels = { pending: t("待配对", "Awaiting pairing"), active: t("已配对", "Paired"), cancelled: t("已取消", "Cancelled") };
 type Failure = { requestId?: string };
 function randomAuthorizationCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return `uci_${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let value = "";
+  while (value.length < 32) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(64))) {
+      if (byte < 252) value += alphabet[byte % alphabet.length];
+      if (value.length === 32) break;
+    }
+  }
+  return value;
 }
 
 // Business request lifetime only; authentication and CSRF stay in Foundation.
@@ -33,12 +38,11 @@ function useAction() {
   return { pending, failure, run, idle: () => ref.current === null };
 }
 
-export function Instances({ creating, closeCreate, hostsChanged, select, statistics, refreshSignal = 0 }: { creating: boolean; closeCreate(): void; hostsChanged(): void; select(id: string): void; statistics: HostStatistics; refreshSignal?: number }) {
+export function Instances({ hostsChanged, select, statistics, refreshSignal = 0 }: { hostsChanged(): void; select(id: string): void; statistics: HostStatistics; refreshSignal?: number }) {
   const { client, notify } = useAdminApplication();
   const [response, setResponse] = useState<ClientInstanceListResponse | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [generation, setGeneration] = useState(0);
-  const [offset, setOffset] = useState(0);
   const [cancelling, setCancelling] = useState<ClientInstance | null>(null);
   const [rotating, setRotating] = useState<ClientInstance | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
@@ -48,22 +52,13 @@ export function Instances({ creating, closeCreate, hostsChanged, select, statist
     return match ? match[1] : null;
   });
   const refresh = () => setGeneration(value => value + 1);
-  function created(value: CreatedInstance) {
-    const { activation_code: _activationCode, ...instance } = value;
-    setResponse(current => current === null ? current : {
-      ...current,
-      total: current.total + 1,
-      instances: current.offset === 0 ? [instance, ...current.instances].slice(0, current.limit) : current.instances,
-    });
-    refresh();
-  }
   useEffect(() => {
     const controller = new AbortController(); setFailure(null);
-    void client.request(`${instancesPath}?limit=50&offset=${offset}`, isInstances, { signal: controller.signal })
-      .then(value => { if (!controller.signal.aborted) { setResponse(value); if (value.total > 0 && value.instances.length === 0) setOffset(Math.max(0, Math.floor((value.total - 1) / value.limit) * value.limit)); } })
+    void client.request(instancesPath, isInstances, { signal: controller.signal })
+      .then(value => { if (!controller.signal.aborted) setResponse(value); })
       .catch(error => { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); });
     return () => controller.abort();
-  }, [client, generation, offset, refreshSignal]);
+  }, [client, generation, refreshSignal]);
   function closeActivation() {
     setActivation(null);
     if (window.location.pathname.startsWith("/activate/")) window.history.replaceState(null, "", "/#instances");
@@ -82,12 +77,11 @@ export function Instances({ creating, closeCreate, hostsChanged, select, statist
     {failure ? <ErrorState requestId={failure.requestId} onRetry={refresh}>{t("无法加载实例", "Unable to load instances")}</ErrorState>
       : rows === null ? <LoadingState>{t("正在加载实例…", "Loading instances…")}</LoadingState>
       : rows.length === 0 ? <EmptyState>{t("暂无实例", "No instances yet")}</EmptyState>
-      : <>{deletion.failure && <ErrorState requestId={deletion.failure.requestId}>{t("删除未能确认，请刷新实例列表核对。", "Deletion could not be confirmed. Refresh and check the instance list.")}</ErrorState>}<Table aria-label={t("实例列表", "Instance list")}><caption>{t("实例 {0}–{1}，共 {2} 个", "Instances {0}–{1} of {2}", [String(response!.offset + 1), String(response!.offset + rows.length), String(response!.total)])}</caption><thead><tr><th scope="col">{t("名称", "Name")}</th><th scope="col">{t("配对状态", "Pairing status")}</th><th scope="col">{t("在线状态", "Online status")}</th><th scope="col">{t("系统 / 架构", "System / architecture")}</th><th scope="col">{t("授权码", "Authorization code")}</th><th scope="col">{t("操作", "Actions")}</th><th scope="col">{t("删除", "Delete")}</th></tr></thead>
-        <tbody>{rows.map(row => { const host = hostById.get(row.instance_id); return <tr key={row.request_id}><th scope="row">{host ? <a aria-label={t("选择实例 {0}", "Select instance {0}", [row.display_name])} href={`#details/${host.id}`} onClick={() => select(host.id)}>{row.display_name}</a> : row.display_name}</th><td>{labels[row.status]}</td>
+      : <>{deletion.failure && <ErrorState requestId={deletion.failure.requestId}>{t("删除未能确认，请刷新实例列表核对。", "Deletion could not be confirmed. Refresh and check the instance list.")}</ErrorState>}<Table aria-label={t("实例列表", "Instance list")}><thead><tr><th scope="col">{t("账户名", "Account name")}</th><th scope="col">{t("账户", "Account")}</th><th scope="col">{t("密码", "Password")}</th><th scope="col">{t("配对状态", "Pairing status")}</th><th scope="col">{t("在线状态", "Online status")}</th><th scope="col">{t("系统 / 架构", "System / architecture")}</th><th scope="col">{t("操作", "Actions")}</th><th scope="col">{t("删除", "Delete")}</th></tr></thead>
+        <tbody>{rows.map(row => { const host = hostById.get(row.instance_id); return <tr key={row.request_id}><th scope="row">{host ? <a aria-label={t("选择实例 {0}", "Select instance {0}", [row.display_name])} href={`#details/${host.id}`} onClick={() => select(host.id)}>{row.display_name}</a> : row.display_name}</th>
+        <td><code>{row.instance_id}</code></td><td><code>{row.authorization_code}</code></td><td>{labels[row.status]}</td>
         <td>{host ? displayLabel(host.status) : row.status === "active" ? t("等待首次上报", "Waiting for first report") : "—"}</td><td>{host ? `${host.os} / ${host.arch}` : "—"}</td>
-        <td><code>{row.authorization_code}</code></td><td><div className="sarmg-actions">{row.status !== "cancelled" && <Button onClick={() => setRotating(row)}>{t("更换授权码", "Change code")}</Button>}{row.status === "pending" && <Button onClick={() => setCancelling(row)}>{t("取消配对", "Cancel pairing")}</Button>}</div></td><td><div className="sarmg-actions">{deleteCandidate === row.request_id ? <><Button disabled={deletion.pending} onClick={() => setDeleteCandidate(null)}>{t("取消", "Cancel")}</Button><Button className="sarmg-danger" disabled={deletion.pending} onClick={() => void deletion.run(async signal => { await client.request(`${instancesPath}/${row.request_id}/delete`, isNoContent, { method: "DELETE", signal }); if (!signal.aborted) { setDeleteCandidate(null); refresh(); hostsChanged(); notify(t("实例已删除", "Instance deleted")); } })}>{deletion.pending ? t("正在删除…", "Deleting…") : t("确认删除", "Confirm delete")}</Button></> : <Button disabled={deletion.pending} onClick={() => setDeleteCandidate(row.request_id)}>{t("删除", "Delete")}</Button>}</div></td></tr>; })}</tbody></Table>
-        <div className="sarmg-actions"><Button disabled={response!.offset === 0} onClick={() => setOffset(Math.max(0, response!.offset - response!.limit))}>{t("上一页", "Previous")}</Button><Button disabled={response!.offset + rows.length >= response!.total} onClick={() => setOffset(response!.offset + response!.limit)}>{t("下一页", "Next")}</Button></div></>}
-    {creating && <CreateInstance close={closeCreate} changed={created} />}
+        <td><div className="sarmg-actions">{row.status !== "cancelled" && <Button onClick={() => setRotating(row)}>{t("更换密码", "Change password")}</Button>}{row.status === "pending" && <Button onClick={() => setCancelling(row)}>{t("取消配对", "Cancel pairing")}</Button>}</div></td><td><div className="sarmg-actions">{deleteCandidate === row.request_id ? <><Button disabled={deletion.pending} onClick={() => setDeleteCandidate(null)}>{t("取消", "Cancel")}</Button><Button className="sarmg-danger" disabled={deletion.pending} onClick={() => void deletion.run(async signal => { await client.request(`${instancesPath}/${row.request_id}/delete`, isNoContent, { method: "DELETE", signal }); if (!signal.aborted) { setDeleteCandidate(null); refresh(); hostsChanged(); notify(t("实例已删除", "Instance deleted")); } })}>{deletion.pending ? t("正在删除…", "Deleting…") : t("确认删除", "Confirm delete")}</Button></> : <Button disabled={deletion.pending} onClick={() => setDeleteCandidate(row.request_id)}>{t("删除", "Delete")}</Button>}</div></td></tr>; })}</tbody></Table></>}
     {cancelling && <CancelInstance instance={cancelling} close={() => setCancelling(null)} changed={() => { setCancelling(null); refresh(); }} />}
     {rotating && <RotateInstance instance={rotating} close={() => setRotating(null)} changed={() => { setRotating(null); refresh(); hostsChanged(); notify(t("授权码已更换，客户端必须使用新码重新配对。", "Authorization code changed. The client must pair again with the new code.")); }} />}
     {activation !== null && <ActivateInstance initialId={activation} close={closeActivation} changed={() => {
@@ -98,32 +92,11 @@ export function Instances({ creating, closeCreate, hostsChanged, select, statist
 
 function RotateInstance({ instance, close, changed }: { instance: ClientInstance; close(): void; changed(): void }) {
   const { client } = useAdminApplication(); const action = useAction();
-  return <ConfirmDangerDialog title={t("更换授权码", "Change authorization code")} description={t("更换 {0} 的授权码会立即撤销现有客户端凭据。客户端必须取得新码并重新配对。", "Changing {0}'s authorization code immediately revokes its current client credential. The client must receive the new code and pair again.", [instance.display_name])}
+  return <ConfirmDangerDialog title={t("更换密码", "Change password")} description={t("更换 {0} 的密码会立即撤销现有客户端凭据。客户端必须取得新的授权码并重新配对。", "Changing {0}'s password immediately revokes its current client credential. The client must receive the new authorization code and pair again.", [instance.display_name])}
     pending={action.pending} onClose={() => { if (action.idle()) close(); }} onConfirm={() => void action.run(async signal => {
       await client.request(`${instancesPath}/${instance.request_id}/authorization`, isInstance, { method: "PUT", signal, body: JSON.stringify({ authorization_code: randomAuthorizationCode() }) });
       if (!signal.aborted) changed();
     })}>{action.failure && <ErrorState requestId={action.failure.requestId}>{t("更换未能确认，请刷新实例核对授权码和配对状态。", "The change could not be confirmed. Refresh and verify the code and pairing state.")}</ErrorState>}</ConfirmDangerDialog>;
-}
-
-function CreateInstance({ close, changed }: { close(): void; changed(value: CreatedInstance): void }) {
-  const { client, notify } = useAdminApplication();
-  const action = useAction();
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
-    void action.run(async signal => {
-      const value = await client.request(instancesPath, isCreatedInstance, { method: "POST", signal,
-        body: JSON.stringify({ display_name: String(data.get("display_name")).trim() }) });
-      if (!signal.aborted) { changed(value); close(); notify(t("实例已创建，授权码可在列表中查看和复制。", "Instance created. Its authorization code is available in the list.")); }
-    });
-  }
-  return <Dialog title={t("新建 客户端 实例", "Create client instance")} onClose={() => { if (action.idle()) close(); }}>
-    <form onSubmit={submit} aria-busy={action.pending}>
-      {action.failure && <ErrorState requestId={action.failure.requestId}>{t("创建未能确认。请先刷新实例核对状态；丢失配对码的实例可取消后重新创建，不要重复提交。", "Creation could not be confirmed. Refresh and check first. If the code is lost, cancel the instance and create a new one; do not submit twice.")}</ErrorState>}
-      <FormField label={t("实例名称", "Instance name")}><InstanceNameField name="display_name" required title={t("实例名称最多 32 个字符", "Instance names may contain up to 32 characters")} readOnly={action.pending} data-sarmg-initial-focus /></FormField>
-      <p>{t("实例名称最多 32 个字符。", "Instance names may contain up to 32 characters.")}</p>
-      <div className="sarmg-actions"><Button disabled={action.pending} onClick={close}>{t("取消", "Cancel")}</Button><Button type="submit" disabled={action.pending}>{action.pending ? t("正在创建…", "Creating…") : t("创建实例", "Create instance")}</Button></div>
-    </form>
-  </Dialog>;
 }
 
 function CancelInstance({ instance, close, changed }: { instance: ClientInstance; close(): void; changed(): void }) {

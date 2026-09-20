@@ -40,6 +40,31 @@ fn host(id: Uuid, os: &str) -> HostIdentity {
     }
 }
 
+#[tokio::test]
+async fn instance_list_returns_every_instance_in_case_insensitive_name_order() {
+    let path = database_path();
+    let pool = open_database(&path).await;
+    store::initialize_empty(&pool).await.unwrap();
+    let secrets = host_monitoring_server::crypto::SecretBox::new([0x42; 32]);
+    for name in ["zulu", "Bravo", "alpha"] {
+        let (result, _) = store::create_invite(&pool, &secrets, name, "admin")
+            .await
+            .unwrap();
+        assert!(matches!(result, store::CreateInviteResult::Created(_)));
+    }
+
+    let names = store::list_invites(&pool, &secrets)
+        .await
+        .unwrap()
+        .0
+        .into_iter()
+        .map(|instance| instance.display_name)
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["alpha", "Bravo", "zulu"]);
+    pool.close().await;
+    std::fs::remove_file(path).unwrap();
+}
+
 fn report(host_id: Uuid, collected_at: DateTime<Utc>) -> ClientReport {
     ClientReport {
         schema_version: host_protocol::CLIENT_REPORT_SCHEMA_VERSION,
@@ -284,11 +309,7 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
             .unwrap();
     assert!(!columns.iter().any(|name| name == "expires_at"));
     assert_eq!(
-        store::list_invites(&pool, &secrets, 100, 0)
-            .await
-            .unwrap()
-            .0[0]
-            .status,
+        store::list_invites(&pool, &secrets).await.unwrap().0[0].status,
         "cancelled"
     );
     pool.close().await;
@@ -313,7 +334,7 @@ async fn direct_delete_removes_a_pending_instance_in_one_operation() {
             .unwrap()
     );
     assert!(
-        store::list_invites(&pool, &secrets, 100, 0)
+        store::list_invites(&pool, &secrets)
             .await
             .unwrap()
             .0
@@ -380,7 +401,7 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
             .is_some()
     );
 
-    let new_code = format!("uci_{}", Uuid::new_v4().simple());
+    let new_code = Uuid::new_v4().simple().to_string();
     let rotated = store::rotate_invite_authorization(
         &pool,
         &secrets,
@@ -432,7 +453,7 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
             .is_some()
     );
 
-    let final_code = format!("uci_{}", Uuid::new_v4().simple());
+    let final_code = Uuid::new_v4().simple().to_string();
     store::rotate_invite_authorization(
         &pool,
         &secrets,
@@ -513,10 +534,7 @@ async fn recovery_preserves_an_absent_host_identity_and_never_overwrites_an_exis
             .unwrap(),
         Some(old_host_id)
     );
-    let rebound = store::list_invites(&pool, &secrets, 100, 0)
-        .await
-        .unwrap()
-        .0;
+    let rebound = store::list_invites(&pool, &secrets).await.unwrap().0;
     assert_eq!(rebound[0].instance_id, old_host_id.to_string());
     assert_eq!(rebound[0].authorization_code, code);
 
@@ -578,11 +596,7 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         .await
         .unwrap();
     assert_eq!(
-        store::list_invites(&pool, &secrets, 100, 0)
-            .await
-            .unwrap()
-            .0[0]
-            .status,
+        store::list_invites(&pool, &secrets).await.unwrap().0[0].status,
         "pending"
     );
     let instance_id = Uuid::parse_str(&invite.instance_id).expect("canonical instance id");
@@ -714,11 +728,7 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         "Renamed Server"
     );
     assert_eq!(
-        store::list_invites(&pool, &secrets, 100, 0)
-            .await
-            .unwrap()
-            .0[0]
-            .display_name,
+        store::list_invites(&pool, &secrets).await.unwrap().0[0].display_name,
         "Renamed Server"
     );
 

@@ -30,7 +30,7 @@ impl CreateClientInstanceRequest {
         let display_name = self
             .display_name
             .as_deref()
-            .unwrap_or("概览")
+            .unwrap_or("新实例")
             .trim()
             .to_owned();
         validate_required("display_name", &display_name, 255)?;
@@ -83,6 +83,13 @@ mod instance_name_tests {
             .validated()
             .is_ok()
         );
+        assert_eq!(
+            serde_json::from_value::<CreateClientInstanceRequest>(serde_json::json!({}))
+                .unwrap()
+                .validated()
+                .unwrap(),
+            "新实例"
+        );
     }
 
     #[test]
@@ -123,16 +130,6 @@ pub struct ClientInstanceSummary {
 pub struct ClientInstanceListResponse {
     pub instances: Vec<ClientInstanceSummary>,
     pub hosts: Vec<HostSummary>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ClientInstanceListQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -156,17 +153,32 @@ impl UpdateClientAuthorizationRequest {
 }
 
 pub fn validate_activation_code(value: &str) -> Result<()> {
-    if !value.starts_with("uci_")
-        || value.len() != 36
-        || !value[4..]
+    if value.len() != 32
+        || !value
             .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+            .all(|byte| byte.is_ascii_digit() || byte.is_ascii_lowercase())
     {
         return Err(Error::BadRequest(
-            "authorization_code must use the current uci_ format".into(),
+            "authorization_code must contain exactly 32 lowercase letters or digits".into(),
         ));
     }
     Ok(())
+}
+
+pub fn validate_stored_activation_code(value: &str) -> Result<()> {
+    if validate_activation_code(value).is_ok()
+        || (value.starts_with("uci_")
+            && value.len() == 36
+            && value[4..]
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f')))
+    {
+        Ok(())
+    } else {
+        Err(Error::BadRequest(
+            "stored authorization_code format is invalid".into(),
+        ))
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -214,9 +226,6 @@ pub struct HostSummary {
 pub struct HostListResponse {
     pub hosts: Vec<HostSummary>,
     pub statistics: HostStatistics,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -231,13 +240,6 @@ pub struct HostStatistics {
     pub windows: HostCount,
     pub linux: HostCount,
     pub macos: HostCount,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct HostListQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -664,7 +666,7 @@ mod client_release_tests {
             "arch": "x86_64", "client_version": "0.9.7"
         }))
         .unwrap();
-        for version in ["0.9.3", "0.9.20", "0.9.999", "development-build"] {
+        for version in ["0.9.3", "0.9.21", "0.9.999", "development-build"] {
             host.client_version = version.into();
             assert!(validate_host(&host).is_ok());
         }

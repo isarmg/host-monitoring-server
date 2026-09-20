@@ -31,10 +31,10 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::{
     error::{Error, FoundationErrorEnvelope, Result, database, framework_envelope},
     model::{
-        ClientInstanceListQuery, ClientInstanceListResponse, CreateClientInstanceRequest,
-        CreatedClientInstance, HistoryQuery, HistoryResponse, HostDetailResponse, HostListQuery,
-        HostListResponse, UpdateClientAuthorizationRequest, UpdateMonitoringRemarkRequest,
-        canonical_uuid, validate_pairing, validate_report,
+        ClientInstanceListResponse, CreateClientInstanceRequest, CreatedClientInstance,
+        HistoryQuery, HistoryResponse, HostDetailResponse, HostListResponse,
+        UpdateClientAuthorizationRequest, UpdateMonitoringRemarkRequest, canonical_uuid,
+        validate_pairing, validate_report,
     },
     store,
     telemetry::{
@@ -435,24 +435,13 @@ async fn create_instance(
     }
 }
 
-async fn list_instances(
-    State(state): State<AppState>,
-    Query(query): Query<ClientInstanceListQuery>,
-) -> Result<Response> {
-    let limit = query.limit.unwrap_or(50).clamp(1, 100);
-    let offset = query.offset.unwrap_or(0).max(0);
-    let (instances, hosts, total) = store::list_invites(&state.pool, &state.secrets, limit, offset)
+async fn list_instances(State(state): State<AppState>) -> Result<Response> {
+    let (instances, hosts) = store::list_invites(&state.pool, &state.secrets)
         .await
         .map_err(database)?;
     Ok((
         [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
-        Json(ClientInstanceListResponse {
-            instances,
-            hosts,
-            total,
-            limit,
-            offset,
-        }),
+        Json(ClientInstanceListResponse { instances, hosts }),
     )
         .into_response())
 }
@@ -807,25 +796,12 @@ async fn report(
         .into_response())
 }
 
-async fn list_hosts(
-    State(state): State<AppState>,
-    Query(query): Query<HostListQuery>,
-) -> Result<Json<HostListResponse>> {
-    let limit = query.limit.unwrap_or(200).clamp(1, 1000);
-    let offset = query.offset.unwrap_or(0).max(0);
-    let (hosts, total) = store::list_hosts(&state.pool, limit, offset)
-        .await
-        .map_err(database)?;
+async fn list_hosts(State(state): State<AppState>) -> Result<Json<HostListResponse>> {
+    let hosts = store::list_hosts(&state.pool).await.map_err(database)?;
     let statistics = store::host_statistics(&state.pool)
         .await
         .map_err(database)?;
-    Ok(Json(HostListResponse {
-        hosts,
-        statistics,
-        total,
-        limit,
-        offset,
-    }))
+    Ok(Json(HostListResponse { hosts, statistics }))
 }
 
 async fn host_detail(
