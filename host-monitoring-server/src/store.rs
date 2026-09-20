@@ -9,7 +9,8 @@ use uuid::Uuid;
 pub use crate::database_schema::{initialize_empty, open_existing, open_or_initialize};
 use crate::model::{
     ClientInstanceSummary, ClientPairingPublicSummary, HistoryBucket, HistoryPoint,
-    HistorySeriesResponse, HostSummary, MetricAggregate, MetricSummary, host_status,
+    HistorySeriesResponse, HostCount, HostStatistics, HostSummary, MetricAggregate, MetricSummary,
+    host_status,
 };
 
 const HISTORY_METRICS: [&str; 9] = [
@@ -349,6 +350,34 @@ pub async fn cancel_invite(
     .await?;
     tx.commit().await?;
     Ok(CancelInviteResult::Cancelled)
+}
+
+pub async fn delete_invite(
+    pool: &SqlitePool,
+    invite_id: Uuid,
+    actor: &str,
+) -> anyhow::Result<bool> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let instance_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT instance_id FROM client_instance_invites WHERE invite_id=?")
+            .bind(invite_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some(instance_id) = instance_id else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    audit(
+        &mut tx,
+        "monitoring.client_instance.delete",
+        &instance_id.to_string(),
+        Some(&format!("invite_id={invite_id}")),
+        actor,
+    )
+    .await?;
+    delete_host_records(&mut tx, instance_id).await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 fn client_instance(
@@ -959,6 +988,41 @@ pub async fn list_hosts(
         .await?;
     tx.commit().await?;
     Ok((rows.into_iter().map(summarize).collect(), total))
+}
+
+pub async fn host_statistics(pool: &SqlitePool) -> anyhow::Result<HostStatistics> {
+    #[derive(FromRow)]
+    struct StatusRow {
+        os: String,
+        last_seen_at: DateTime<Utc>,
+        latest_interval_seconds: Option<f64>,
+    }
+    let rows: Vec<StatusRow> = sqlx::query_as(
+        "SELECT os,last_seen_at,latest_interval_seconds FROM monitored_hosts WHERE lifecycle_status='active'",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut statistics = HostStatistics::default();
+    for row in rows {
+        let online = host_status(row.last_seen_at, row.latest_interval_seconds) == "online";
+        add_host_count(&mut statistics.total, online);
+        let os = row.os.trim().to_ascii_lowercase();
+        if os.contains("windows") {
+            add_host_count(&mut statistics.windows, online);
+        } else if os.contains("linux") {
+            add_host_count(&mut statistics.linux, online);
+        } else if os.contains("macos") || os.contains("mac os") || os.contains("darwin") {
+            add_host_count(&mut statistics.macos, online);
+        }
+    }
+    Ok(statistics)
+}
+
+fn add_host_count(count: &mut HostCount, online: bool) {
+    count.total += 1;
+    if online {
+        count.online += 1;
+    }
 }
 
 pub async fn get_host(

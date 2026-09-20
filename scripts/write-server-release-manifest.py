@@ -15,10 +15,10 @@ from typing import NoReturn
 
 
 APPLICATION = "host-monitoring"
-VERSION = "0.9.16"
+VERSION = "0.9.17"
 TARGET = "x86_64-unknown-linux-gnu"
 CONTRACT_FORMAT = "host-monitoring-release-v2"
-SCHEMA_APPLICATION_VERSION = "0.9.16"
+SCHEMA_APPLICATION_VERSION = "0.9.17"
 MANIFEST_FORMAT = "host-monitoring-files-v1"
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
 MAX_ENTRIES = 10_000
@@ -95,10 +95,10 @@ def read_identity(binary: Path) -> tuple[dict[str, object], bytes]:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        fail("usage: write-server-release-manifest.py /absolute/releases/0.9.16")
+        fail("usage: write-server-release-manifest.py /absolute/releases/0.9.17")
     root = Path(sys.argv[1])
     if not root.is_absolute() or root.name != VERSION or root.parent.name != "releases":
-        fail("root must be an absolute releases/0.9.16 directory")
+        fail("root must be an absolute releases/0.9.17 directory")
     if root.resolve(strict=True) != root:
         fail("release root must not traverse symbolic links")
     root_stat = root.lstat()

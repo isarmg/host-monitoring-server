@@ -283,6 +283,10 @@ pub fn router(
             axum::routing::delete(cancel_instance),
         )
         .route(
+            "/api/v2/monitoring/client-instances/{request_id}/delete",
+            axum::routing::delete(delete_instance),
+        )
+        .route(
             "/api/v2/monitoring/client-instances/{request_id}/authorization",
             axum::routing::put(update_instance_authorization),
         )
@@ -497,6 +501,22 @@ async fn cancel_instance(
         store::CancelInviteResult::NotPending => Err(Error::Conflict(
             "only a pending invite can be cancelled or a cancelled invite deleted".into(),
         )),
+    }
+}
+
+async fn delete_instance(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(id): Path<String>,
+) -> Result<StatusCode> {
+    let id = canonical_uuid(&id, "client instance request id")?;
+    if store::delete_invite(&state.pool, id, &principal.subject)
+        .await
+        .map_err(database)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(Error::NotFound("client instance invite not found".into()))
     }
 }
 
@@ -786,8 +806,12 @@ async fn list_hosts(
     let (hosts, total) = store::list_hosts(&state.pool, limit, offset)
         .await
         .map_err(database)?;
+    let statistics = store::host_statistics(&state.pool)
+        .await
+        .map_err(database)?;
     Ok(Json(HostListResponse {
         hosts,
+        statistics,
         total,
         limit,
         offset,

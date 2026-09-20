@@ -20,7 +20,7 @@ try {
       await page.route("**/api/v2/**", async route => {
         const request = route.request(); const path = new URL(request.url()).pathname;
         if (request.method() !== "GET") assert.equal(request.headers()["x-csrf-token"], session.csrf_token);
-        if (path.endsWith("/monitoring/hosts")) return route.fulfill({ json: { hosts: [], total: 0, limit: 50, offset: 0 } });
+        if (path.endsWith("/monitoring/hosts")) return route.fulfill({ json: { hosts: [], statistics: { total: { total: 0, online: 0 }, windows: { total: 0, online: 0 }, linux: { total: 0, online: 0 }, macos: { total: 0, online: 0 } }, total: 0, limit: 50, offset: 0 } });
         if (path.endsWith("/client-instances")) {
           if (request.method() === "POST") {
             creates++; assert.deepEqual(Object.keys(request.postDataJSON()),["display_name"]);
@@ -31,6 +31,10 @@ try {
             return route.fulfill({ status: 201, json: { ...invitation, activation_code: code } });
           }
           return route.fulfill({ json: { instances: invitation ? [invitation] : [], hosts: [], total: invitation ? 1 : 0, limit: 50, offset: 0 } });
+        }
+        if (path.endsWith(`/client-instances/${inviteId}/delete`)) {
+          invitation = null;
+          return route.fulfill({ status: 204 });
         }
         if (path.endsWith(`/client-instances/${inviteId}`)) {
           if (invitation.status === "cancelled") invitation = null; else invitation.status = "cancelled";
@@ -78,8 +82,12 @@ try {
       await page.getByRole("button", { name: "取消配对", exact: true }).click();
       await page.getByRole("button", { name: "确认", exact: true }).click();
       await expect(page.getByRole("cell", { name: "已取消", exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "删除实例", exact: true }).click();
-      await page.getByRole("button", { name: "确认", exact: true }).click();
+      await page.getByRole("button", { name: "删除", exact: true }).click();
+      await expect(page.getByRole("button", { name: "取消", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "取消", exact: true }).click();
+      await expect(page.getByRole("button", { name: "确认删除", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "删除", exact: true }).click();
+      await page.getByRole("button", { name: "确认删除", exact: true }).click();
       await expect(page.getByText("暂无实例", { exact: true })).toBeVisible();
       // A new trusted invitation models the independent Client pairing request.
       invitation = { request_id: inviteId, instance_id: instanceId, display_name: "测试 Client", status: "pending", created_at: "2026-09-05T00:00:00Z", authorization_code: code };

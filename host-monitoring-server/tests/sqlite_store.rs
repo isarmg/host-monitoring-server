@@ -230,6 +230,39 @@ async fn cancelled_code_cannot_authorize_a_new_pairing() {
 }
 
 #[tokio::test]
+async fn direct_delete_removes_a_pending_instance_in_one_operation() {
+    let path = database_path();
+    let pool = open_database(&path).await;
+    store::initialize_empty(&pool).await.unwrap();
+    let secrets = host_monitoring_server::crypto::SecretBox::new([0x42; 32]);
+    let (result, _) = store::create_invite(&pool, &secrets, "Delete me", "admin")
+        .await
+        .unwrap();
+    let store::CreateInviteResult::Created(invite) = result else {
+        panic!("create failed")
+    };
+    assert!(
+        store::delete_invite(&pool, Uuid::parse_str(&invite.request_id).unwrap(), "admin")
+            .await
+            .unwrap()
+    );
+    assert!(
+        store::list_invites(&pool, &secrets, 100, 0)
+            .await
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    assert!(
+        !store::delete_invite(&pool, Uuid::parse_str(&invite.request_id).unwrap(), "admin")
+            .await
+            .unwrap()
+    );
+    pool.close().await;
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
 async fn rotating_instance_authorization_revokes_old_credential_and_requires_new_code() {
     let path = database_path();
     let pool = open_database(&path).await;

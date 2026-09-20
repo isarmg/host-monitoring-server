@@ -36,6 +36,15 @@ function bucket(start, cpu, memory) {
     disk_read_bytes_per_second: absent, disk_written_bytes_per_second: absent,
     max_temperature_celsius: absent, gpu_utilization_percent: absent, gpu_memory_usage_percent: absent };
 }
+function latestReport() {
+  return { schema_version: 1, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
+    system: { uptime_seconds: 90061, cpu: { usage_percent: 12.5, logical_count: 8, physical_count: 4, per_core_percent: [10, 15] }, memory: { total_bytes: 17179869184, used_bytes: 8589934592, available_bytes: 8589934592, swap_total_bytes: 0, swap_used_bytes: 0 },
+      networks: [{ name: "eth0", received_bytes_total: 1024, transmitted_bytes_total: 2048, received_bytes_per_second: 128, transmitted_bytes_per_second: 256, packets_received_total: 10, packets_transmitted_total: 20, receive_errors_total: 0, transmit_errors_total: 0 }],
+      disks: [{ name: "nvme0n1", mount_point: "/", file_system: "ext4", total_bytes: 1000000000, available_bytes: 500000000, read_bytes_total: 4096, written_bytes_total: 8192, read_bytes_per_second: 512, written_bytes_per_second: 1024, is_read_only: false }],
+      temperatures: [{ id: "cpu", label: "CPU Package", celsius: 48.5, max_celsius: 90, critical_celsius: 100, source: "sysfs" }],
+      gpus: [{ id: "gpu0", vendor: "NVIDIA", name: "RTX", utilization_percent: 35, memory_total_bytes: 8589934592, memory_used_bytes: 4294967296, temperature_celsius: 55, power_watts: 120, core_clock_mhz: 1500, memory_clock_mhz: 7000, pcie_rx_bytes_per_second: 256, pcie_tx_bytes_per_second: 128, source: "nvml" }] },
+    capabilities: [{ name: "system.cpu", available: true, source: "sysinfo", error_kind: null, message: null }], client: { spool_pending_batches: 0, collector_errors: 0 } };
+}
 const server = await preview({ preview: { host: "127.0.0.1", port: 0, strictPort: true } });
 const address = server.httpServer.address();
 assert.ok(address && typeof address === "object");
@@ -61,7 +70,7 @@ try {
         let body;
         if (isHosts) {
           const hosts = Array.from({ length: 51 }, (_, index) => host(index)).filter(value => !deleted || value.id !== host(50).id);
-          body = { hosts, total: hosts.length, limit: 1000, offset };
+          body = { hosts, statistics: { total: { total: hosts.length, online: 0 }, windows: { total: 0, online: 0 }, linux: { total: hosts.length, online: 0 }, macos: { total: 0, online: 0 } }, total: hosts.length, limit: 1000, offset };
         } else if (url.pathname.endsWith("/client-instances")) {
           instanceRequested.push(offset);
           const indexes = Array.from({ length: Math.min(50, 51 - offset) }, (_, index) => offset + index).filter(index => !deleted || index !== 50);
@@ -81,7 +90,7 @@ try {
           detailRequests++; detailActive++; maximumDetailActive = Math.max(maximumDetailActive, detailActive);
           await new Promise(resolve => setTimeout(resolve, 250));
           detailActive--;
-          body = { host: host(50), latest: null };
+          body = { host: host(50), latest: latestReport() };
         } else if (url.pathname.endsWith(`/monitoring/managed-instances/${host(50).id}`) && request.method() === "DELETE") {
           deleted = true;
           return route.fulfill({ status: 204 });
@@ -111,11 +120,11 @@ try {
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
       const table = page.getByRole("table", { name: "实例列表" });
       await expect(table.locator("tbody tr")).toHaveCount(50);
-      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["名称", "配对状态", "在线状态", "系统 / 架构", "授权码", "操作"]);
+      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["名称", "配对状态", "在线状态", "系统 / 架构", "授权码", "操作", "删除"]);
       const cells = table.locator("tbody tr").first().locator("td");
       assert.deepEqual((await cells.allTextContents()).slice(0, 3), ["已配对", "在线", "linux / x86_64"]);
       await expect(cells.nth(3).locator("code")).toHaveText("uci_00000000000000000000000000000000");
-      await expect(cells.nth(3).getByRole("button", { name: "复制", exact: true })).toBeVisible();
+      await expect(cells.nth(3).getByRole("button", { name: "复制", exact: true })).toHaveCount(0);
       assert.equal(await table.locator("tbody tr").first().evaluate(row => getComputedStyle(row).display), "table-row");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
@@ -130,13 +139,14 @@ try {
       assert.deepEqual([...new Set(requested)], [0]);
       assert.deepEqual([...new Set(instanceRequested)], [0, 50]);
       await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
-      await page.getByText("等待首次上报", { exact: true }).waitFor();
+      await page.getByText("16.0 GiB", { exact: true }).waitFor();
+      await expect(page.locator("pre")).toHaveCount(0);
       await page.getByRole("heading", { name: "历史趋势", exact: true }).waitFor();
       await page.getByText("页面最近更新", { exact: true }).waitFor();
       await expect.poll(() => detailRequests).toBeGreaterThanOrEqual(2);
       assert.equal(maximumDetailActive, 1);
       await expect.poll(() => historyRequests).toBeGreaterThanOrEqual(1);
-      const cpuPoints = page.getByRole("img", { name: "CPU 与内存使用率历史图" }).locator("polyline").first();
+      const cpuPoints = page.getByRole("img", { name: "CPU 历史图" }).locator("polyline").first();
       await expect(cpuPoints).toHaveAttribute("points", /0,90 1\.6666.*?,80 98\.3333.*?,70/);
       await page.getByRole("button", { name: "暂停自动更新（2 秒）", exact: true }).click();
       const beforeManualRefresh = detailRequests;
@@ -147,7 +157,7 @@ try {
       await expect(page.getByRole("alert")).toContainText("history-failure-123");
       await expect(page.locator("body")).not.toContainText("SECRET history");
       await page.getByRole("alert").getByRole("button", { name: "重试", exact: true }).click();
-      await expect(page.getByRole("img", { name: "CPU 与内存使用率历史图" })).toBeVisible();
+      await expect(page.getByRole("img", { name: "CPU 历史图" })).toBeVisible();
       for (const theme of ["light", "dark"]) {
         if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /切换到.*模式/ }).click();
         const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();

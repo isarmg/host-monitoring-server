@@ -46,7 +46,7 @@ function HostsPage() {
       {failure && <ErrorState requestId={failure.requestId} onRetry={refresh}>{t("无法加载主机列表", "Unable to load hosts")}</ErrorState>}
       <div className="sarmg-content-stack" hidden={page !== "instances"}>
       {response === null ? failure ? <EmptyState>{t("请重试加载实例列表", "Retry loading the instance list")}</EmptyState> : <LoadingState>{t("正在加载主机…", "Loading hosts…")}</LoadingState>
-        : <Instances creating={creating} closeCreate={() => setCreating(false)} refreshSignal={generation} hostsChanged={refresh} select={id => { setSelected(id); window.location.hash = `details/${id}`; }} />}
+        : <Instances creating={creating} closeCreate={() => setCreating(false)} refreshSignal={generation} statistics={response.statistics} hostsChanged={refresh} select={id => { setSelected(id); window.location.hash = `details/${id}`; }} />}
       </div>
       {page === "details" && <section className="sarmg-content-stack" aria-label={t("详细信息与设置", "Details and settings")}>
       {response === null ? failure ? <EmptyState>{t("请重试加载实例列表", "Retry loading the instance list")}</EmptyState> : <LoadingState>{t("正在加载主机…", "Loading hosts…")}</LoadingState>

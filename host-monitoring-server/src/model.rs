@@ -213,9 +213,24 @@ pub struct HostSummary {
 #[derive(Debug, Serialize)]
 pub struct HostListResponse {
     pub hosts: Vec<HostSummary>,
+    pub statistics: HostStatistics,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct HostCount {
+    pub total: i64,
+    pub online: i64,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct HostStatistics {
+    pub total: HostCount,
+    pub windows: HostCount,
+    pub linux: HostCount,
+    pub macos: HostCount,
 }
 
 #[derive(Debug, Deserialize)]
@@ -649,7 +664,7 @@ mod client_release_tests {
             "arch": "x86_64", "client_version": "0.9.7"
         }))
         .unwrap();
-        for version in ["0.9.3", "0.9.16", "0.9.999", "development-build"] {
+        for version in ["0.9.3", "0.9.17", "0.9.999", "development-build"] {
             host.client_version = version.into();
             assert!(validate_host(&host).is_ok());
         }

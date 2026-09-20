@@ -92,10 +92,13 @@ export type Host = {
 
 export type HostListResponse = {
   hosts: Host[];
+  statistics: HostStatistics;
   total: number;
   limit: number;
   offset: number;
 };
+export type HostCount = { total: number; online: number };
+export type HostStatistics = { total: HostCount; windows: HostCount; linux: HostCount; macos: HostCount };
 
 const HOST_KEYS = [
   "id",
@@ -139,16 +142,24 @@ const CAPABILITY_ERROR_KINDS = new Set([
 ]);
 
 export function isHostListResponse(value: unknown): value is HostListResponse {
-  if (!isRecordWithExactKeys(value, ["hosts", "total", "limit", "offset"])) {
+  if (!isRecordWithExactKeys(value, ["hosts", "statistics", "total", "limit", "offset"])) {
     return false;
   }
   return (
     Array.isArray(value.hosts) &&
-    value.hosts.every(isHost) &&
+    value.hosts.every(isHost) && isHostStatistics(value.statistics) &&
     isNonNegativeSafeInteger(value.total) &&
     isPositiveSafeInteger(value.limit) &&
     isNonNegativeSafeInteger(value.offset)
   );
+}
+
+function isHostStatistics(value: unknown): value is HostStatistics {
+  if (!isRecordWithExactKeys(value, ["total", "windows", "linux", "macos"])) return false;
+  return [value.total, value.windows, value.linux, value.macos].every(count =>
+    isRecordWithExactKeys(count, ["total", "online"])
+    && isNonNegativeSafeInteger(count.total) && isNonNegativeSafeInteger(count.online)
+    && count.online <= count.total);
 }
 
 export function isHostDetailResponse(value: unknown): value is HostDetailResponse {
