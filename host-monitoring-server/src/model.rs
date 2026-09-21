@@ -660,7 +660,7 @@ mod client_release_tests {
             "arch": "x86_64", "client_version": "0.9.7"
         }))
         .unwrap();
-        for version in ["0.9.3", "0.9.24", "0.9.999", "development-build"] {
+        for version in ["0.9.3", "0.9.25", "0.9.999", "development-build"] {
             host.client_version = version.into();
             assert!(validate_host(&host).is_ok());
         }

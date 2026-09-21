@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.24/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.25/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.24/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.24
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.25/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.25
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.24/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.24` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.25` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -36,7 +36,7 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 Foundation 0.8.8 / `946bbb5f4bf3e06d421b6f463bd637b83617a5be`，八个 Web 包使用
+当前 Server Rust 固定 Foundation 0.8.9 / `2908f7598571a47c1469bfa08a08c4776cc93049`，八个 Web 包使用
 同版正式 Release tarball 与 SHA-512 integrity，无相邻 Foundation 路径依赖；独立 CI 已通过，
 见[消费者矩阵](https://github.com/isarmg/sarmg-foundation-server/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护，诊断管理功能已移除。
@@ -148,7 +148,7 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.24
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.25
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-password \
