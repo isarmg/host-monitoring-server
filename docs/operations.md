@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.23/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.24/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.23/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.23
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.24/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.24
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.23/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.23` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.24` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -148,7 +148,7 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.23
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.24
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-password \
