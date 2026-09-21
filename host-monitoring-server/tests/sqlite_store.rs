@@ -401,7 +401,7 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
             .is_some()
     );
 
-    let new_code = Uuid::new_v4().simple().to_string();
+    let new_code = "a1".repeat(18);
     let rotated = store::rotate_invite_authorization(
         &pool,
         &secrets,
@@ -453,7 +453,7 @@ async fn rotating_instance_authorization_revokes_old_credential_and_requires_new
             .is_some()
     );
 
-    let final_code = Uuid::new_v4().simple().to_string();
+    let final_code = "b2".repeat(18);
     store::rotate_invite_authorization(
         &pool,
         &secrets,
@@ -574,7 +574,7 @@ async fn recovery_preserves_an_absent_host_identity_and_never_overwrites_an_exis
 }
 
 #[tokio::test]
-async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
+async fn current_sqlite_supports_pair_activate_report_rename_and_delete() {
     let path = database_path();
     let pool = open_database(&path).await;
     store::initialize_empty(&pool)
@@ -590,6 +590,16 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         panic!("fresh database unexpectedly rejected an invite");
     };
     let activation_code = activation_code.expect("created invite has an activation code");
+    let invite_id = Uuid::parse_str(&invite.request_id).expect("canonical invite id");
+    assert!(
+        store::update_instance_name(&pool, invite_id, "Pending Server", "admin")
+            .await
+            .expect("rename pending instance")
+    );
+    assert_eq!(
+        store::list_invites(&pool, &secrets).await.unwrap().0[0].display_name,
+        "Pending Server"
+    );
     // Code age is not an authorization deadline; only explicit cancel/use invalidates it.
     sqlx::query("UPDATE client_instance_invites SET created_at='2000-01-01T00:00:00Z'")
         .execute(&pool)
@@ -669,7 +679,7 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
         .await
         .expect("read host")
         .expect("activated host exists");
-    assert_eq!(summary.name, "Server One");
+    assert_eq!(summary.name, "Pending Server");
     assert_eq!(summary.os, "linux-updated");
     assert_eq!(summary.last_seen_at, received_at);
     assert_eq!(summary.latest_collected_at, Some(collected_at));
@@ -714,9 +724,9 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
     assert_eq!(history[0].report_id, report.report_id);
 
     assert!(
-        store::update_remark(&pool, instance_id, "Renamed Server", "admin")
+        store::update_instance_name(&pool, invite_id, "Renamed Server", "admin")
             .await
-            .expect("update remark")
+            .expect("rename active instance")
     );
     assert_eq!(
         store::get_host(&pool, instance_id)
@@ -754,7 +764,7 @@ async fn current_sqlite_supports_pair_activate_report_remark_and_delete() {
             .fetch_one(&pool)
             .await
             .expect("count complete audit events");
-    assert_eq!(complete_audits, 4);
+    assert_eq!(complete_audits, 5);
 
     pool.close().await;
     let reopened = open_database(&path).await;

@@ -201,14 +201,14 @@ pub async fn list_invites(
 
 fn random_authorization_code() -> String {
     const ALPHABET: &[u8; 36] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-    let mut value = String::with_capacity(32);
+    let mut value = String::with_capacity(36);
     let mut bytes = [0_u8; 64];
-    while value.len() < 32 {
+    while value.len() < 36 {
         rand::rngs::OsRng.fill_bytes(&mut bytes);
         for byte in bytes {
             if byte < 252 {
                 value.push(ALPHABET[usize::from(byte % 36)] as char);
-                if value.len() == 32 {
+                if value.len() == 36 {
                     break;
                 }
             }
@@ -225,7 +225,7 @@ mod authorization_code_tests {
     fn generated_authorization_codes_have_the_shared_format() {
         for _ in 0..64 {
             let value = random_authorization_code();
-            assert_eq!(value.len(), 32);
+            assert_eq!(value.len(), 36);
             assert!(
                 value
                     .bytes()
@@ -1314,39 +1314,39 @@ pub async fn history_series(
     }))
 }
 
-pub async fn update_remark(
+pub async fn update_instance_name(
     pool: &SqlitePool,
-    host_id: Uuid,
-    remark: &str,
+    invite_id: Uuid,
+    name: &str,
     actor: &str,
 ) -> anyhow::Result<bool> {
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
-    let changed = sqlx::query("UPDATE monitored_hosts SET name=? WHERE host_id=?")
-        .bind(remark)
-        .bind(host_id)
-        .execute(&mut *tx)
-        .await?
-        .rows_affected()
-        == 1;
-    if changed {
-        sqlx::query("UPDATE client_instance_invites SET display_name=? WHERE instance_id=?")
-            .bind(remark)
-            .bind(host_id)
-            .execute(&mut *tx)
-            .await?;
-        audit(
-            &mut tx,
-            "monitoring.instance.remark.update",
-            &host_id.to_string(),
-            None,
-            actor,
-        )
-        .await?;
-        tx.commit().await?;
-    } else {
+    let instance_id: Option<Uuid> = sqlx::query_scalar(
+        "UPDATE client_instance_invites SET display_name=? WHERE invite_id=? RETURNING instance_id",
+    )
+    .bind(name)
+    .bind(invite_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(instance_id) = instance_id else {
         tx.rollback().await?;
-    }
-    Ok(changed)
+        return Ok(false);
+    };
+    sqlx::query("UPDATE monitored_hosts SET name=? WHERE host_id=?")
+        .bind(name)
+        .bind(instance_id)
+        .execute(&mut *tx)
+        .await?;
+    audit(
+        &mut tx,
+        "monitoring.client_instance.name.update",
+        &instance_id.to_string(),
+        Some(&format!("invite_id={invite_id}")),
+        actor,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 pub async fn delete_host(pool: &SqlitePool, host_id: Uuid, actor: &str) -> anyhow::Result<bool> {

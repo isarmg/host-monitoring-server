@@ -12,10 +12,10 @@ type Failure = { requestId?: string };
 function randomAuthorizationCode(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   let value = "";
-  while (value.length < 32) {
+  while (value.length < 36) {
     for (const byte of crypto.getRandomValues(new Uint8Array(64))) {
       if (byte < 252) value += alphabet[byte % alphabet.length];
-      if (value.length === 32) break;
+      if (value.length === 36) break;
     }
   }
   return value;
@@ -73,13 +73,12 @@ export function Instances({ hostsChanged, select, statistics, refreshSignal = 0 
       {statisticRows.map(([label, count]) => <tr key={label}><th scope="row">{label}</th><td>{count.total} / {count.online}</td></tr>)}
     </tbody></Table></section>
     <section className="sarmg-content-stack" aria-labelledby="instances-heading"><h2 id="instances-heading">{t("实例列表", "Instance list")}</h2>
-    <p>{t("列表统一显示配对、在线和监控状态。每个实例拥有一个长期授权码；更换后客户端必须重新配对。", "The list combines pairing, online, and monitoring state. Each instance has a long-lived authorization code; changing it requires the client to pair again.")}</p>
     {failure ? <ErrorState requestId={failure.requestId} onRetry={refresh}>{t("无法加载实例", "Unable to load instances")}</ErrorState>
       : rows === null ? <LoadingState>{t("正在加载实例…", "Loading instances…")}</LoadingState>
       : rows.length === 0 ? <EmptyState>{t("暂无实例", "No instances yet")}</EmptyState>
-      : <>{deletion.failure && <ErrorState requestId={deletion.failure.requestId}>{t("删除未能确认，请刷新实例列表核对。", "Deletion could not be confirmed. Refresh and check the instance list.")}</ErrorState>}<Table aria-label={t("实例列表", "Instance list")}><thead><tr><th scope="col">{t("账户名", "Account name")}</th><th scope="col">{t("账户", "Account")}</th><th scope="col">{t("密码", "Password")}</th><th scope="col">{t("配对状态", "Pairing status")}</th><th scope="col">{t("在线状态", "Online status")}</th><th scope="col">{t("系统 / 架构", "System / architecture")}</th><th scope="col">{t("操作", "Actions")}</th><th scope="col">{t("删除", "Delete")}</th></tr></thead>
-        <tbody>{rows.map(row => { const host = hostById.get(row.instance_id); return <tr key={row.request_id}><th scope="row">{host ? <a aria-label={t("选择实例 {0}", "Select instance {0}", [row.display_name])} href={`#details/${host.id}`} onClick={() => select(host.id)}>{row.display_name}</a> : row.display_name}</th>
-        <td><code>{row.instance_id}</code></td><td><code>{row.authorization_code}</code></td><td>{labels[row.status]}</td>
+      : <>{deletion.failure && <ErrorState requestId={deletion.failure.requestId}>{t("删除未能确认，请刷新实例列表核对。", "Deletion could not be confirmed. Refresh and check the instance list.")}</ErrorState>}<Table aria-label={t("实例列表", "Instance list")}><thead><tr><th scope="col">{t("实例名称", "Instance name")}</th><th scope="col">{t("配对状态", "Pairing status")}</th><th scope="col">{t("在线状态", "Online status")}</th><th scope="col">{t("操作系统/架构", "Operating system / architecture")}</th><th scope="col">{t("操作", "Actions")}</th><th scope="col">{t("删除", "Delete")}</th></tr></thead>
+        <tbody>{rows.map(row => { const host = hostById.get(row.instance_id); return <tr key={row.request_id}><th scope="row"><a className="sarmg-instance-link" aria-label={t("选择实例 {0}", "Select instance {0}", [row.display_name])} href={`#details/${row.instance_id}`} onClick={() => select(row.instance_id)}>{row.display_name}</a></th>
+        <td>{labels[row.status]}</td>
         <td>{host ? displayLabel(host.status) : row.status === "active" ? t("等待首次上报", "Waiting for first report") : "—"}</td><td>{host ? `${host.os} / ${host.arch}` : "—"}</td>
         <td><div className="sarmg-actions">{row.status !== "cancelled" && <Button onClick={() => setRotating(row)}>{t("更换密码", "Change password")}</Button>}{row.status === "pending" && <Button onClick={() => setCancelling(row)}>{t("取消配对", "Cancel pairing")}</Button>}</div></td><td><div className="sarmg-actions">{deleteCandidate === row.request_id ? <><Button disabled={deletion.pending} onClick={() => setDeleteCandidate(null)}>{t("取消", "Cancel")}</Button><Button className="sarmg-danger" disabled={deletion.pending} onClick={() => void deletion.run(async signal => { await client.request(`${instancesPath}/${row.request_id}/delete`, isNoContent, { method: "DELETE", signal }); if (!signal.aborted) { setDeleteCandidate(null); refresh(); hostsChanged(); notify(t("实例已删除", "Instance deleted")); } })}>{deletion.pending ? t("正在删除…", "Deleting…") : t("确认删除", "Confirm delete")}</Button></> : <Button disabled={deletion.pending} onClick={() => setDeleteCandidate(row.request_id)}>{t("删除", "Delete")}</Button>}</div></td></tr>; })}</tbody></Table></>}
     {cancelling && <CancelInstance instance={cancelling} close={() => setCancelling(null)} changed={() => { setCancelling(null); refresh(); }} />}

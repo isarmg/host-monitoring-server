@@ -41,14 +41,14 @@ impl CreateClientInstanceRequest {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UpdateMonitoringRemarkRequest {
-    pub remark: String,
+pub struct UpdateClientInstanceNameRequest {
+    pub display_name: String,
 }
 
-impl UpdateMonitoringRemarkRequest {
+impl UpdateClientInstanceNameRequest {
     pub fn validated(self) -> Result<String> {
-        let value = self.remark.trim().to_owned();
-        validate_required("remark", &value, 255)?;
+        let value = self.display_name.trim().to_owned();
+        validate_required("display_name", &value, 255)?;
         validate_instance_name(&value)?;
         Ok(value)
     }
@@ -106,7 +106,7 @@ mod instance_name_tests {
                     count == 32
                 );
                 assert_eq!(
-                    UpdateMonitoringRemarkRequest { remark: name }
+                    UpdateClientInstanceNameRequest { display_name: name }
                         .validated()
                         .is_ok(),
                     count == 32
@@ -153,26 +153,20 @@ impl UpdateClientAuthorizationRequest {
 }
 
 pub fn validate_activation_code(value: &str) -> Result<()> {
-    if value.len() != 32
+    if value.len() != 36
         || !value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || byte.is_ascii_lowercase())
     {
         return Err(Error::BadRequest(
-            "authorization_code must contain exactly 32 lowercase letters or digits".into(),
+            "authorization_code must contain exactly 36 lowercase letters or digits".into(),
         ));
     }
     Ok(())
 }
 
 pub fn validate_stored_activation_code(value: &str) -> Result<()> {
-    if validate_activation_code(value).is_ok()
-        || (value.starts_with("uci_")
-            && value.len() == 36
-            && value[4..]
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f')))
-    {
+    if validate_activation_code(value).is_ok() {
         Ok(())
     } else {
         Err(Error::BadRequest(

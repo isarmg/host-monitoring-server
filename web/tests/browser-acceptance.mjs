@@ -24,7 +24,7 @@ function instance(index) {
     display_name: "Host-" + index,
     status: "active",
     created_at: "2026-09-04T00:00:00Z",
-    authorization_code: String(index).padStart(32, "0"),
+    authorization_code: String(index).padStart(36, "0"),
   };
 }
 function aggregate(value) { return { count: value === null ? 0 : 1, min: value, max: value, avg: value }; }
@@ -57,7 +57,7 @@ try {
       const errors = [];
       const requested = [];
       const instanceRequested = [];
-      let detailActive = 0, detailRequests = 0, maximumDetailActive = 0, historyRequests = 0, failNextHistory = false, deleted = false;
+      let detailActive = 0, detailRequests = 0, maximumDetailActive = 0, historyRequests = 0, failNextHistory = false, deleted = false, renamed = null;
       page.on("pageerror", error => errors.push(error.message));
       await page.route("**/api/v2/**", async route => {
         const request = route.request();
@@ -73,7 +73,11 @@ try {
         } else if (url.pathname.endsWith("/client-instances")) {
           instanceRequested.push(url.search);
           const indexes = Array.from({ length: 51 }, (_, index) => index).filter(index => !deleted || index !== 50);
-          body = { instances: indexes.map(instance), hosts: indexes.map(host) };
+          body = { instances: indexes.map(index => ({ ...instance(index), ...(index === 50 && renamed ? { display_name: renamed } : {}) })), hosts: indexes.map(host) };
+        } else if (url.pathname.endsWith(`/monitoring/client-instances/${instance(50).request_id}`) && request.method() === "PATCH") {
+          assert.deepEqual(request.postDataJSON(), { display_name: "Renamed Host" });
+          renamed = "Renamed Host";
+          return route.fulfill({ status: 204 });
         } else if (historyMatch) {
           historyRequests++;
           if (failNextHistory) {
@@ -100,6 +104,9 @@ try {
       });
       await page.goto(`http://127.0.0.1:${address.port}`);
       await page.getByRole("link", { name: "选择实例 Host-0", exact: true }).waitFor();
+      const instanceNameStyle = await page.getByRole("link", { name: "选择实例 Host-0", exact: true }).evaluate(element => ({ color: getComputedStyle(element).color, parentColor: getComputedStyle(element.parentElement).color, decoration: getComputedStyle(element).textDecorationLine }));
+      assert.equal(instanceNameStyle.color, instanceNameStyle.parentColor);
+      assert.equal(instanceNameStyle.decoration, "none");
       await checkHeaderActions(page, "/monitoring/hosts");
       await page.locator("#statistics-heading").waitFor();
       const spacing = await page.evaluate(() => {
@@ -119,12 +126,11 @@ try {
       assert.equal(await page.getByRole("button", { name: "Diagnostics", exact: true }).count(), 0);
       const table = page.getByRole("table", { name: "实例列表" });
       await expect(table.locator("tbody tr")).toHaveCount(51);
-      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["账户名", "账户", "密码", "配对状态", "在线状态", "系统 / 架构", "操作", "删除"]);
+      assert.deepEqual(await table.getByRole("columnheader").allTextContents(), ["实例名称", "配对状态", "在线状态", "操作系统/架构", "操作", "删除"]);
       const cells = table.locator("tbody tr").first().locator("td");
-      assert.deepEqual((await cells.allTextContents()).slice(2, 5), ["已配对", "在线", "linux / x86_64"]);
-      await expect(cells.nth(0).locator("code")).toHaveText(host(0).id);
-      await expect(cells.nth(1).locator("code")).toHaveText("00000000000000000000000000000000");
-      await expect(cells.nth(1).getByRole("button", { name: "复制", exact: true })).toHaveCount(0);
+      assert.deepEqual((await cells.allTextContents()).slice(0, 3), ["已配对", "在线", "linux / x86_64"]);
+      await expect(table).not.toContainText(host(0).id);
+      await expect(table).not.toContainText("00000000000000000000000000000000");
       assert.equal(await table.locator("tbody tr").first().evaluate(row => getComputedStyle(row).display), "table-row");
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);
@@ -134,6 +140,12 @@ try {
       await expect.poll(() => detailActive).toBe(1);
       await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
+      const pairingDetails = page.getByRole("region", { name: "配对账户信息" });
+      await expect(pairingDetails).toContainText(host(50).id);
+      await expect(pairingDetails).toContainText(String(50).padStart(36, "0"));
+      await page.getByLabel("实例名称", { exact: true }).fill("Renamed Host");
+      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await expect(pairingDetails).toContainText("Renamed Host");
       assert.deepEqual([...new Set(requested)], [""]);
       assert.deepEqual([...new Set(instanceRequested)], [""]);
       await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();

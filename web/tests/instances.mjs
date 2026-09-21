@@ -7,7 +7,7 @@ const session = { authenticated: true, user_id: "A".repeat(43), username: "admin
 const inviteId = "018f1f4b-7a5d-7b5f-8d31-123456789abc";
 const pairId = "018f1f4b-7a5d-7b5f-8d31-123456789abd";
 const instanceId = "018f1f4b-7a5d-7b5f-8d31-123456789abe";
-const code = "a1".repeat(16);
+const code = "a1".repeat(18);
 async function assertColumnContentAlignment(table) {
   const offsets = await table.evaluate(element => {
     const textStart = cell => {
@@ -17,7 +17,7 @@ async function assertColumnContentAlignment(table) {
       const range = document.createRange(); range.selectNodeContents(text);
       return range.getBoundingClientRect().left;
     };
-    const contentStart = cell => cell.firstElementChild?.getBoundingClientRect().left ?? textStart(cell);
+    const contentStart = cell => textStart(cell);
     const headings = [...element.querySelectorAll("thead th")], values = [...element.querySelector("tbody tr").children];
     if (headings.length !== values.length) throw new Error("table column count mismatch");
     return headings.map((heading, index) => Math.abs(textStart(heading) - contentStart(values[index])));
@@ -39,7 +39,7 @@ try {
         if (path.endsWith("/monitoring/hosts")) return route.fulfill({ json: { hosts: [], statistics: { total: { total: 0, online: 0 }, windows: { total: 0, online: 0 }, linux: { total: 0, online: 0 }, macos: { total: 0, online: 0 } } } });
         if (path.endsWith("/client-instances")) {
           if (request.method() === "POST") {
-            creates++; assert.deepEqual(request.postDataJSON(), {});
+            creates++; assert.deepEqual(request.postDataJSON(), { display_name: "新实例" });
             if (creates === 1) return route.fulfill({ status: 503, headers: { "x-request-id": "invite-123" }, json: { code: "service_unavailable", retryable: true, message: "SECRET", request_id: "invite-123" } });
             await new Promise(done => { release = done; });
             invitation = { request_id: inviteId, instance_id: instanceId, display_name: "新实例",
@@ -53,6 +53,11 @@ try {
           return route.fulfill({ status: 204 });
         }
         if (path.endsWith(`/client-instances/${inviteId}`)) {
+          if (request.method() === "PATCH") {
+            assert.deepEqual(request.postDataJSON(), { display_name: "未配对新名称" });
+            invitation.display_name = "未配对新名称";
+            return route.fulfill({ status: 204 });
+          }
           if (invitation.status === "cancelled") invitation = null; else invitation.status = "cancelled";
           return route.fulfill({ status: 204 });
         }
@@ -75,14 +80,26 @@ try {
       await expect.poll(() => typeof release).toBe("function");
       await page.getByRole("button", { name: "新建实例", exact: true }).click();
       assert.equal(creates, 2); release();
-      await expect(page.getByRole("rowheader", { name: "新实例", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "选择实例 新实例", exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "关闭通知", exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "关闭通知", exact: true })).toHaveCount(0, { timeout: 7_000 });
-      await expect(page.getByRole("cell").filter({ hasText: code })).toBeVisible();
       const instanceTable = page.getByRole("table", { name: "实例列表" });
+      await expect(instanceTable).not.toContainText(instanceId);
+      await expect(instanceTable).not.toContainText(code);
       assert.ok((await instanceTable.locator("th, td").evaluateAll(elements => elements.map(element => getComputedStyle(element).textAlign))).every(value => value === "left"));
       await assertColumnContentAlignment(instanceTable);
       assert.ok((await instanceTable.locator(".sarmg-actions").evaluateAll(elements => elements.map(element => getComputedStyle(element).justifyContent))).every(value => value === "flex-start"));
+      await page.getByRole("link", { name: "选择实例 新实例", exact: true }).click();
+      await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
+      const pairingDetails = page.getByRole("region", { name: "配对账户信息" });
+      await expect(pairingDetails).toContainText(instanceId);
+      await expect(pairingDetails).toContainText(code);
+      await expect(page.getByText("实例尚未配对，完成客户端配对后将显示监控详情。", { exact: true })).toBeVisible();
+      await page.getByLabel("实例名称", { exact: true }).fill("未配对新名称");
+      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await expect(pairingDetails).toContainText("未配对新名称");
+      await page.getByRole("button", { name: "实例列表", exact: true }).click();
+      await expect(page.getByRole("link", { name: "选择实例 未配对新名称", exact: true })).toBeVisible();
       for (const theme of ["light", "dark"]) {
         await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
         assert.deepEqual((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations, []);

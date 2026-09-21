@@ -1,8 +1,7 @@
 import { displayLabel } from "./display-labels";
 import { t, getLocale } from "@sarmg/admin-ui/i18n";
-import { InstanceNameField } from "@sarmg/admin-shell";
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, ConfirmDangerDialog, ErrorState, FormField, LoadingState } from "@sarmg/admin-ui";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Button, ConfirmDangerDialog, ErrorState, LoadingState } from "@sarmg/admin-ui";
 import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import {
   isHistorySeriesResponse,
@@ -15,7 +14,7 @@ import {
 
 type Failure = { requestId?: string };
 
-export function HostDetails({ hostId, refreshSignal, changed, removed }: { hostId: string; refreshSignal: number; changed(): void; removed(): void }) {
+export function HostDetails({ hostId, refreshSignal, removed }: { hostId: string; refreshSignal: number; removed(): void }) {
   const { client, notify } = useAdminApplication();
   const [detail, setDetail] = useState<HostDetailResponse | null>(null);
   const [history, setHistory] = useState<HistorySeriesResponse | null>(null);
@@ -28,10 +27,9 @@ export function HostDetails({ hostId, refreshSignal, changed, removed }: { hostI
   const [failure, setFailure] = useState<Failure | null>(null);
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [dirty, setDirty] = useState(false);
   const mutation = useRef<AbortController | null>(null);
   const appliedRefreshSignal = useRef(refreshSignal);
+  const requestRefresh = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -39,26 +37,25 @@ export function HostDetails({ hostId, refreshSignal, changed, removed }: { hostI
     let stopped = false;
     let inFlight = false;
     let refreshQueued = false;
-    const forceInitialRefresh = appliedRefreshSignal.current !== refreshSignal;
-    appliedRefreshSignal.current = refreshSignal;
+    let forceQueued = false;
     async function refresh(force = false) {
       if (stopped || (!force && (paused || document.hidden))) return;
-      if (inFlight) { refreshQueued = true; return; }
+      if (inFlight) { refreshQueued = true; forceQueued ||= force; return; }
       inFlight = true;
       refreshQueued = false;
+      forceQueued = false;
       controller = new AbortController();
       try {
         const value = await client.request(`/api/v2/monitoring/hosts/${hostId}`, isHostDetailResponse, { signal: controller.signal });
         if (stopped || controller.signal.aborted || value.host.id !== hostId) return;
         setDetail(value); setUpdatedAt(new Date()); setFailure(null);
-        setDraft(current => dirty ? current : value.host.name);
       } catch (error) {
         if (!stopped && !controller.signal.aborted) setFailure({ requestId: errorRequestId(error) });
       } finally {
         inFlight = false;
-        if (stopped || paused || document.hidden) return;
-        if (refreshQueued) void refresh();
-        else timer = window.setTimeout(refresh, 2_000);
+        if (stopped) return;
+        if (refreshQueued) void refresh(forceQueued);
+        else if (!paused && !document.hidden) timer = window.setTimeout(refresh, 2_000);
       }
     }
     const visible = () => {
@@ -67,10 +64,21 @@ export function HostDetails({ hostId, refreshSignal, changed, removed }: { hostI
       if (inFlight) refreshQueued = true;
       else void refresh();
     };
+    requestRefresh.current = () => {
+      if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+      if (inFlight) { refreshQueued = true; forceQueued = true; }
+      else void refresh(true);
+    };
     document.addEventListener("visibilitychange", visible);
-    void refresh(forceInitialRefresh);
-    return () => { stopped = true; controller?.abort(); if (timer !== undefined) clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
-  }, [client, hostId, paused, dirty, refreshSignal]);
+    void refresh();
+    return () => { stopped = true; requestRefresh.current = () => undefined; controller?.abort(); if (timer !== undefined) clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
+  }, [client, hostId, paused]);
+
+  useEffect(() => {
+    if (appliedRefreshSignal.current === refreshSignal) return;
+    appliedRefreshSignal.current = refreshSignal;
+    requestRefresh.current();
+  }, [refreshSignal]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -99,24 +107,19 @@ export function HostDetails({ hostId, refreshSignal, changed, removed }: { hostI
   }, [client, hostId, historyHours, historyGeneration, refreshSignal]);
 
   useEffect(() => () => mutation.current?.abort(), []);
-  async function mutate(method: "PATCH" | "DELETE", body?: string) {
+  async function remove() {
     if (mutation.current) return;
     const controller = new AbortController(); mutation.current = controller; setPending(true); setFailure(null);
     try {
-      await client.request(`/api/v2/monitoring/managed-instances/${hostId}`, isNoContent, { method, body, signal: controller.signal });
+      await client.request(`/api/v2/monitoring/managed-instances/${hostId}`, isNoContent, { method: "DELETE", signal: controller.signal });
       if (!controller.signal.aborted) {
-        setDeleting(false); setDirty(false);
-        notify(method === "PATCH" ? t("实例名称已保存", "Instance name saved") : t("实例已移除", "Instance removed"));
-        if (method === "DELETE") removed(); else changed();
+        setDeleting(false);
+        notify(t("实例已移除", "Instance removed"));
+        removed();
       }
     } catch (error) { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); }
     finally { if (!controller.signal.aborted) { mutation.current = null; setPending(false); } }
   }
-  function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    void mutate("PATCH", JSON.stringify({ remark: draft.trim() }));
-  }
-
   if (detail === null) return failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>;
   const { host, latest } = detail;
   return <div className="sarmg-content-stack">
@@ -135,15 +138,9 @@ export function HostDetails({ hostId, refreshSignal, changed, removed }: { hostI
     </section>
     <HistoryChart response={history} hours={historyHours} loading={historyLoading} failure={historyFailure} retry={() => setHistoryGeneration(value => value + 1)} changeHours={setHistoryHours} />
     <LatestDevices report={latest} />
-    <section className="sarmg-content-panel" aria-label={t("实例设置", "Instance settings")}><h2>{t("实例设置", "Instance settings")}</h2>
-      <form onSubmit={save} aria-busy={pending}>
-        <FormField label={t("实例名称", "Instance name")}><InstanceNameField name="remark" value={draft} onChange={event => { setDraft(event.target.value); setDirty(true); }} required title={t("实例名称最多 32 个字符", "Instance names may contain up to 32 characters")} readOnly={pending} /></FormField>
-        <p>{t("自动更新不会覆盖正在编辑的名称。", "Automatic updates do not overwrite a name being edited.")}</p>
-        <div className="sarmg-actions"><Button disabled={pending} onClick={() => setDeleting(true)}>{t("删除实例", "Delete instance")}</Button><Button type="submit" disabled={pending || !dirty}>{pending ? t("正在处理…", "Processing…") : t("保存设置", "Save settings")}</Button></div>
-      </form>
-    </section>
+    <section className="sarmg-content-panel" aria-label={t("实例操作", "Instance actions")}><h2>{t("实例操作", "Instance actions")}</h2><div className="sarmg-actions"><Button disabled={pending} onClick={() => setDeleting(true)}>{t("删除实例", "Delete instance")}</Button></div></section>
     {deleting && <ConfirmDangerDialog title={t("删除监控实例", "Delete monitoring instance")} description={t("移除 {0} 的监控数据和绑定凭据。该客户端需要重新配对才能再次接入。", "Remove monitoring data and bound credentials for {0}. The client must pair again to reconnect.", [host.name])}
-      pending={pending} onClose={() => { if (!mutation.current) setDeleting(false); }} onConfirm={() => void mutate("DELETE")} />}
+      pending={pending} onClose={() => { if (!mutation.current) setDeleting(false); }} onConfirm={() => void remove()} />}
   </div>;
 }
 

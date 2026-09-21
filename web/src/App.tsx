@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from "@sarmg/admin-ui";
 import { useEffect, useState } from "react";
 import { CURRENT_API_PREFIX, administratorApi, isCreatedInstance, isHostListResponse, isUuid, type HostListResponse } from "./api";
 import { Instances } from "./Instances";
-import { HostDetails } from "./HostDetails";
+import { InstanceDetails } from "./InstanceDetails";
 import { InstanceHeaderActions, InstancePageNavigation, type InstancePage } from "@sarmg/admin-shell";
 
 function currentRoute(): { page: InstancePage; hostId: string | null } {
@@ -40,8 +40,8 @@ function HostsPage() {
     if (creating) return;
     setCreating(true); setCreateFailure(null); window.location.hash = "instances";
     try {
-      await client.request("/api/v2/monitoring/client-instances", isCreatedInstance, { method: "POST", body: "{}" });
-      notify(t("实例已创建，密码可在列表中查看。", "Instance created. Its password is available in the list."));
+      await client.request("/api/v2/monitoring/client-instances", isCreatedInstance, { method: "POST", body: JSON.stringify({ display_name: t("新实例", "New instance") }) });
+      notify(t("实例已创建，密码可在详细信息中查看。", "Instance created. Its password is available in details."));
       refresh();
     } catch (error) { setCreateFailure({ requestId: errorRequestId(error) }); }
     finally { setCreating(false); }
@@ -62,7 +62,7 @@ function HostsPage() {
       </div>
       {page === "details" && <section className="sarmg-content-stack" aria-label={t("详细信息与设置", "Details and settings")}>
       {response === null ? failure ? <EmptyState>{t("请重试加载实例列表", "Retry loading the instance list")}</EmptyState> : <LoadingState>{t("正在加载主机…", "Loading hosts…")}</LoadingState>
-        : hostId ? <HostDetails key={hostId} hostId={hostId} refreshSignal={generation} changed={refresh} removed={removed} /> : <EmptyState>{t("暂无主机，请点击“新建实例”并完成配对。", "No hosts yet. Create an instance and complete pairing.")}</EmptyState>}
+        : hostId ? <InstanceDetails key={hostId} instanceId={hostId} refreshSignal={generation} changed={refresh} removed={removed} /> : <EmptyState>{t("暂无实例，请点击“新建实例”。", "No instances yet. Create an instance.")}</EmptyState>}
       </section>}
       {page === "logs" && <section className="sarmg-content-stack"><h2>{t("上报时间", "Report timestamps")}</h2>{host ? <dl className="sarmg-content-panel"><dt>{t("实例", "Instance")}</dt><dd>{host.name}</dd><dt>{t("最近客户端采集", "Latest client collection")}</dt><dd>{host.latest_collected_at ?? t("暂无上报", "No reports")}</dd><dt>{t("服务端最后接收", "Last server receipt")}</dt><dd>{host.last_seen_at}</dd></dl> : <EmptyState>{t("所选实例不在当前摘要页，请返回详情读取。", "The selected instance is not in the current summary page; open its details instead.")}</EmptyState>}</section>}
   </section>;

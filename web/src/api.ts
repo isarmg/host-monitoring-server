@@ -325,7 +325,7 @@ export type ClientInstanceListResponse = {
 };
 const INSTANCE_KEYS = ["request_id", "instance_id", "display_name", "status", "created_at", "authorization_code"];
 const isAuthorizationCode = (value: unknown): value is string => typeof value === "string"
-  && (/^[a-z0-9]{32}$/.test(value) || /^uci_[0-9a-f]{32}$/.test(value));
+  && /^[a-z0-9]{36}$/.test(value);
 function instanceFields(value: Record<string, unknown>): boolean {
   return isUuid(value.request_id) && isUuid(value.instance_id) && isText(value.display_name)
     && ["pending", "active", "cancelled"].includes(String(value.status))
@@ -342,7 +342,7 @@ export function isInstance(value: unknown): value is ClientInstance {
 }
 export function isCreatedInstance(value: unknown): value is CreatedInstance {
   return isRecordWithExactKeys(value, [...INSTANCE_KEYS, "activation_code"]) && instanceFields(value)
-    && value.status === "pending" && typeof value.activation_code === "string" && /^[a-z0-9]{32}$/.test(value.activation_code);
+    && value.status === "pending" && typeof value.activation_code === "string" && /^[a-z0-9]{36}$/.test(value.activation_code);
 }
 export type PairingSummary = { request_id: string; os: string; arch: string; client_version: string; status: "waiting" | "active" | "denied" | "expired"; expires_at: string };
 export function isPairingSummary(value: unknown): value is PairingSummary {

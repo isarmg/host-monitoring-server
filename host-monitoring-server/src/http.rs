@@ -33,7 +33,7 @@ use crate::{
     model::{
         ClientInstanceListResponse, CreateClientInstanceRequest, CreatedClientInstance,
         HistoryQuery, HistoryResponse, HostDetailResponse, HostListResponse,
-        UpdateClientAuthorizationRequest, UpdateMonitoringRemarkRequest, canonical_uuid,
+        UpdateClientAuthorizationRequest, UpdateClientInstanceNameRequest, canonical_uuid,
         validate_pairing, validate_report,
     },
     store,
@@ -280,7 +280,7 @@ pub fn router(
         )
         .route(
             "/api/v2/monitoring/client-instances/{request_id}",
-            axum::routing::delete(cancel_instance),
+            axum::routing::patch(update_instance_name).delete(cancel_instance),
         )
         .route(
             "/api/v2/monitoring/client-instances/{request_id}/delete",
@@ -292,7 +292,7 @@ pub fn router(
         )
         .route(
             "/api/v2/monitoring/managed-instances/{host_id}",
-            axum::routing::patch(update_remark).delete(delete_host),
+            axum::routing::delete(delete_host),
         )
         .route(
             host_protocol::CLIENT_ADMIN_ACTIVATE_PATH,
@@ -469,6 +469,24 @@ async fn update_instance_authorization(
         Json(instance),
     )
         .into_response())
+}
+
+async fn update_instance_name(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(id): Path<String>,
+    Json(request): Json<UpdateClientInstanceNameRequest>,
+) -> Result<StatusCode> {
+    let id = canonical_uuid(&id, "client instance request id")?;
+    let name = request.validated()?;
+    if store::update_instance_name(&state.pool, id, &name, &principal.subject)
+        .await
+        .map_err(database)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(Error::NotFound("client instance invite not found".into()))
+    }
 }
 
 async fn cancel_instance(
@@ -874,24 +892,6 @@ async fn host_history(
         points,
     })
     .into_response())
-}
-
-async fn update_remark(
-    State(state): State<AppState>,
-    Extension(principal): Extension<Principal>,
-    Path(id): Path<String>,
-    Json(request): Json<UpdateMonitoringRemarkRequest>,
-) -> Result<StatusCode> {
-    let id = canonical_uuid(&id, "host id")?;
-    let remark = request.validated()?;
-    if store::update_remark(&state.pool, id, &remark, &principal.subject)
-        .await
-        .map_err(database)?
-    {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(Error::NotFound("monitored host not found".into()))
-    }
 }
 
 async fn delete_host(

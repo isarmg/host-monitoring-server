@@ -29,7 +29,7 @@ await withLocalServer({ prefix: "HOST_MONITORING", binary: "../../target/debug/h
     await page.getByRole("button", { name: "新建实例", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "新建 客户端 实例" })).toHaveCount(0);
     const code = await page.locator("td code").first().textContent();
-    assert.match(code, /^[a-z0-9]{32}$/);
+    assert.match(code, /^[a-z0-9]{36}$/);
     await page.goto(activationUrl.href);
     await page.getByRole("button", { name: "读取配对请求" }).click();
     await expect(page.getByRole("region", { name: "待核对设备" })).toContainText("linux / x86_64");
