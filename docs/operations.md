@@ -36,7 +36,7 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 Foundation 0.8.9 / `2908f7598571a47c1469bfa08a08c4776cc93049`，八个 Web 包使用
+当前 Server Rust 固定 Foundation 0.9.0 / `b146afefb1e864de78d5f6ac43cab7d1a4e02fc7`，八个 Web 包使用
 同版正式 Release tarball 与 SHA-512 integrity，无相邻 Foundation 路径依赖；独立 CI 已通过，
 见[消费者矩阵](https://github.com/isarmg/sarmg-foundation-server/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护，诊断管理功能已移除。
@@ -143,6 +143,11 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 
 锁身份来自规范化后的实际数据库路径；数据库本体、锁文件及其父目录仍必须满足当前文件安全检查。不要
 用复制数据库到另一路径的方式绕开锁：那既不是一致快照，也不在当前支持范围。
+
+Foundation 0.9.0 起，Host 新建库会在同一事务中写入唯一的 `_sarmg_platform_metadata` 记录，启动和
+readiness 都要求该记录严格匹配 `server-control-plane`。历史版本曾只建表而没有写记录；这类库会被只读
+拒绝，服务不会在启动时静默补写。发布采用该合同的下一版 Host 前，必须由外部 Upgrade 工具提供并验证
+明确的离线迁移边；在此之前不要把当前源码直接覆盖部署到持有该历史状态的实例。
 
 ## 4. Server 日常命令
 

@@ -27,6 +27,7 @@ sarmg-admin-axum.workspace = true
 sarmg-admin-sqlite.workspace = true
 sarmg-contracts.workspace = true
 sarmg-error.workspace = true
+sarmg-platform-db.workspace = true
 sarmg-schema-identity.workspace = true
 sarmg-server-runtime.workspace = true
 sarmg-server-target.workspace = true

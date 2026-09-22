@@ -122,6 +122,19 @@ pub async fn initialize_empty(pool: &SqlitePool) -> anyhow::Result<()> {
     sqlx::raw_sql(CURRENT_SCHEMA_SQL)
         .execute(&mut *transaction)
         .await?;
+    let created_at_micros = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_micros(),
+    )
+    .context("platform creation timestamp exceeds u64")?;
+    sarmg_platform_db::initialize_current_platform_metadata(
+        &mut transaction,
+        "server-control-plane",
+        created_at_micros,
+    )
+    .await
+    .context("initialize current Foundation platform metadata")?;
     let actual = sarmg_sqlite::schema_fingerprint(&mut *transaction).await?;
     ensure!(
         actual == SCHEMA_SHA256,
@@ -155,6 +168,9 @@ pub async fn validate_pool(pool: &SqlitePool) -> anyhow::Result<()> {
     sarmg_sqlite::require_pool_current_schema(pool, &expected_identity()?)
         .await
         .context("database is not the exact current Host Monitoring schema")?;
+    sarmg_platform_db::require_current_platform_metadata(pool, "server-control-plane")
+        .await
+        .context("database platform metadata is not the exact current contract")?;
     Ok(())
 }
 
@@ -235,6 +251,21 @@ fn validate_connection_contract(connection: &Connection) -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
     verify_current_schema(&metadata, &rows, &expected_identity()?)
         .context("database is not the exact current Host Monitoring schema")?;
+    let platform_metadata: (i64, i64, String, i64) = connection
+        .query_row(
+            "SELECT platform_generation,platform_schema_revision,profile,created_at_micros \
+             FROM _sarmg_platform_metadata WHERE singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .context("read current Foundation platform metadata")?;
+    ensure!(
+        platform_metadata.0 == i64::from(sarmg_platform_db::PLATFORM_GENERATION)
+            && platform_metadata.1 == i64::from(sarmg_platform_db::PLATFORM_SCHEMA_REVISION)
+            && platform_metadata.2 == "server-control-plane"
+            && platform_metadata.3 >= 0,
+        "database platform metadata is not the exact current contract"
+    );
     Ok(())
 }
 

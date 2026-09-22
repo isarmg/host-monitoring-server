@@ -137,6 +137,12 @@ async fn exact_current_schema_survives_close_and_reopen() {
             database_schema::SCHEMA_SHA256.to_string(),
         )
     );
+    let platform_metadata =
+        sarmg_platform_db::require_current_platform_metadata(&pool, "server-control-plane")
+            .await
+            .expect("read the exact current platform metadata");
+    assert_eq!(platform_metadata.profile, "server-control-plane");
+    assert!(platform_metadata.created_at_micros > 0);
 
     let mut first = pool.acquire().await.expect("acquire first connection");
     let mut second = pool.acquire().await.expect("acquire second connection");
@@ -220,6 +226,20 @@ async fn noncurrent_version_missing_metadata_and_schema_drift_are_read_only_reje
     let before = directory_snapshot(directory.path());
     assert!(
         store::open_or_initialize(&database_url(&noncurrent_version))
+            .await
+            .is_err()
+    );
+    assert_snapshot_unchanged(&before, &directory_snapshot(directory.path()));
+
+    let missing_platform_metadata = directory.path().join("missing-platform-metadata.sqlite3");
+    copy_current_database_image(&missing_platform_metadata).await;
+    mutate_checkpoint_and_seed_sidecar_sentinels(
+        &missing_platform_metadata,
+        "DELETE FROM _sarmg_platform_metadata",
+    );
+    let before = directory_snapshot(directory.path());
+    assert!(
+        store::open_or_initialize(&database_url(&missing_platform_metadata))
             .await
             .is_err()
     );

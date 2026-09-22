@@ -20,9 +20,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The current SQLite _sarmg_platform_metadata table is not a runtime dependency.
+          # Reject the retired gateway/repository identities, not current Foundation
+          # packages such as sarmg-platform-db.
           if git grep -n -P \
-              'UNION_|X-Union-|[Uu]nion[Cc]|PluginManifest|ProcessContext|sarmg-platform|sarmg_platform(?!_metadata\b)' \
+              'UNION_|X-Union-|[Uu]nion[Cc]|PluginManifest|ProcessContext|sarmg-platform-gateway|sarmg_platform_gateway|github\.com/isarmg/sarmg-platform(?:\.git)?' \
               -- . ':(exclude).github/**'; then
             exit 1
           fi
