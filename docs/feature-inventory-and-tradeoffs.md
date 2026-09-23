@@ -29,8 +29,8 @@
 | 报告 API | `/api/v2/host-monitor` 当前协议 | 不注册任何平行版本或 alias |
 | API 错误 | Foundation `ErrorEnvelope`：`code/message/retryable/request_id?/details?` | 所有 `/api` 非 2xx（含 extractor/404/405）使用同一严格顶层结构 |
 | 写入 | 有界队列、单 writer、batch、savepoint | 单库单活进程，不是分布式写集群 |
-| 历史 | raw 标量查询及 raw/hourly 自动粒度趋势、两级保留 | 图表查询最长 31 天、最多 1000 点；不是任意时序查询引擎 |
-| Web | Foundation 管理员 client/hook + Host 列表 exact guard，编译进发行物 | 当前提供主机列表、采集详情及实例邀请/配对；图表和 audit 等界面仍未补齐 |
+| 历史 | raw 标量查询、raw/hourly 自动粒度趋势、按服务器接收日期读取原始报告日志及两级保留 | 图表查询最长 31 天、最多 1000 点；日志一次读取所选日全部记录，受 64 MiB / 120 秒 Web 请求预算约束 |
+| Web | Foundation 管理员 client/hook + Host 列表 exact guard，编译进发行物 | 提供主机列表、采集详情、历史图表、上报日志及实例邀请/配对；没有 audit 读取界面 |
 | 诊断 | health/readiness、doctor、事务内 audit 写入 | 不提供数据库修复或 audit 读取 API |
 | 发布 | source-bound binary、全树 manifest、固定目录 | 同版本不可原地覆盖 |
 | 平台 | 仅 `x86_64-unknown-linux-gnu` 构建、发行和运行 | 不提供 ARM Linux、musl、Windows 或 macOS Server；跨平台只属于 Client |
@@ -64,7 +64,7 @@
 
 ## 4. 当前版本与明确不做
 
-- Server 只接受 `0.9.30` 配置与发行身份以及 `0.9.26` 数据库结构身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
+- Server 只接受 `0.9.31` 配置与发行身份以及 `0.9.26` 数据库结构身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
 - 服务端只初始化不存在的当前库，拒绝 metadata-free、非当前 identity 和 Schema drift。
 - 产品不包含 migration、backup、restore；`sarmg-upgrade` 当前也没有 Host 转换边，所以这些操作暂不受支持。
 - Client 不执行远程 Shell、配置修改、补丁管理或自动修复。

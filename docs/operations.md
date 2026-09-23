@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.30/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.31/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.30/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.30
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.31/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.31
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.30/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.30` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.31` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -47,7 +47,7 @@ SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同�
 当前 React 管理台以实例列表和实例详情为主线：列表提供完整实例集合、同页监控摘要、长期授权码和
 新建实例；创建成功后窗口立即关闭。详情每两秒自动读取同一快照的完整最新报告，页面隐藏或暂停时停止轮询，
 并提供 15 分钟至 30 天的有界自动粒度趋势。授权码轮换会撤销旧 Client credential，客户端必须重新配对。
-当前仍没有 audit 查询界面，也不保存逐设备历史。
+当前没有 audit 查询界面；所保存的原始报告可在实例「日志」页按服务器接收日期查看，保留期限见下文。
 `cd web && npm run test:browser` 对实际生产构建执行 Chromium/Firefox 实例列表、指标详情、移动主题与 WCAG AA 验收；
 首次运行需 `npx playwright install --with-deps chromium firefox`。该测试的 API 全部由本机测试数据拦截，不访问真实 Client。
 
@@ -152,7 +152,7 @@ Host 新建库在初始化事务中写入唯一的 `_sarmg_platform_metadata` �
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.30
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.31
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-password \

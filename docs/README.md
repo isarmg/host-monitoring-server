@@ -1,6 +1,6 @@
 # Host Monitoring 文档总览
 
-本目录描述当前 Server `0.9.30` 开发源码及跨端产品概念；独立 Client 实现和命令须在
+本目录描述当前 Server `0.9.31` 开发源码及跨端产品概念；独立 Client 实现和命令须在
 [host-monitoring-client](https://github.com/isarmg/host-monitoring-client) 仓库阅读和执行。
 事实优先级依次为协议类型和当前 Schema、运行时校验、测试、发行 manifest、
 本文档。更改版本身份、HTTP 路由、报告字段或安装布局时，应在同一提交中同步对应文档。
@@ -18,3 +18,4 @@ admin-only username 合同；`host-monitor` Client 继续拥有 Linux/Windows/ma
 | 必要 README | [../README.md](../README.md) | 项目定位、仓库入口和最短质量门 |
 | Server 发行包部署手册 | [server-release-readme.md](server-release-readme.md) | 正式归档的校验、全新安装、配置、启动、监控与故障处理 |
 | 运维 | [operations.md](operations.md) | 服务端部署、配置、诊断、安全与独立 Client 文档入口 |
+| 当前发行说明 | [releases/0.9.31.md](releases/0.9.31.md) | 本版本功能和验证范围 |
