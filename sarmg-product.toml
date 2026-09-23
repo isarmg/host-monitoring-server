@@ -3,8 +3,8 @@ product_id = "host-monitoring"
 
 [foundation]
 platform_generation = 1
-version = "0.9.0"
-git_rev = "b146afefb1e864de78d5f6ac43cab7d1a4e02fc7"
+version = "0.9.1"
+git_rev = "84966364c5b4662104e05741b3045482e4fd4fc8"
 
 [[components]]
 id = "server"
