@@ -219,12 +219,16 @@ try {
       }
       const selectedId = instance(50).request_id;
       await checkWebLanguage(page, {"routes":[["instances","Instance list"],[`details/${selectedId}`,"Details"],[`logs/${selectedId}`,"Logs"]],"names":["验收主机","测试主机"]});
+      const pendingName = "Draft through rebind";
+      await page.getByLabel("实例名称", { exact: true }).fill(pendingName);
       reboundId = "018f1f4b-7a5d-7b5f-8d31-000000000051";
       await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
       await expect.poll(() => typeof releaseReboundDetail).toBe("function");
       await expect(page.getByRole("heading", { name: "Host-50", exact: true })).toHaveCount(0);
+      await expect(page.getByLabel("实例名称", { exact: true })).toHaveValue(pendingName);
       releaseReboundDetail();
       await expect(page.getByRole("heading", { name: "Rebound Host", exact: true })).toBeVisible();
+      await expect(page.getByLabel("实例名称", { exact: true })).toHaveValue(pendingName);
       await expect(page.getByText("服务端仍在收到上报，但当前展示的指标采集时间明显较早；客户端可能正在补传或已调整时钟。", { exact: true })).toBeVisible();
       futureSample = true;
       await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();

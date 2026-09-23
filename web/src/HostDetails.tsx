@@ -1,6 +1,6 @@
 import { displayLabel } from "./display-labels";
 import { t, getLocale } from "@sarmg/admin-ui/i18n";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Button, ConfirmDangerDialog, ErrorState, LoadingState } from "@sarmg/admin-ui";
 import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import {
@@ -14,7 +14,7 @@ import {
 
 type Failure = { requestId?: string };
 
-export function HostDetails({ hostId, refreshSignal, removed, settings }: { hostId: string; refreshSignal: number; removed(): void; settings: ReactNode }) {
+export function HostDetails({ hostId, refreshSignal, removed }: { hostId: string; refreshSignal: number; removed(): void }) {
   const { client, notify } = useAdminApplication();
   const [detail, setDetail] = useState<HostDetailResponse | null>(null);
   const [history, setHistory] = useState<HistorySeriesResponse | null>(null);
@@ -120,13 +120,13 @@ export function HostDetails({ hostId, refreshSignal, removed, settings }: { host
     } catch (error) { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); }
     finally { if (!controller.signal.aborted) { mutation.current = null; setPending(false); } }
   }
-  if (detail === null) return <div className="sarmg-content-stack"><Fragment>{failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>}</Fragment>{settings}</div>;
+  if (detail === null) return failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>;
   const { host, latest } = detail;
   const metricLagMilliseconds = latest === null ? 0 : Date.parse(host.last_seen_at) - Date.parse(latest.collected_at);
   const metricsLagging = host.status === "online" && latest !== null
     && metricLagMilliseconds > Math.max(60_000, latest.interval_seconds * 2_000);
   const metricsAhead = host.status === "online" && latest !== null && metricLagMilliseconds < -60_000;
-  return <div className="sarmg-content-stack"><Fragment>
+  return <div className="sarmg-content-stack">
     <section className="sarmg-content-panel"><h2>{host.name}</h2><dl className="host-detail-list">
       <dt>{t("状态", "Status")}</dt><dd>{displayLabel(host.status)}</dd>
       <dt>{t("系统", "System")}</dt><dd>{host.os}{host.os_version ? ` ${host.os_version}` : ""} / {host.arch}</dd>
@@ -144,7 +144,6 @@ export function HostDetails({ hostId, refreshSignal, removed, settings }: { host
     </section>
     <HistoryChart response={history} hours={historyHours} loading={historyLoading} failure={historyFailure} retry={() => setHistoryGeneration(value => value + 1)} changeHours={setHistoryHours} />
     <LatestDevices report={latest} />
-    </Fragment>{settings}
     <section className="sarmg-content-panel" aria-label={t("实例操作", "Instance actions")}><h2>{t("实例操作", "Instance actions")}</h2><div className="sarmg-actions"><Button disabled={pending} onClick={() => setDeleting(true)}>{t("删除实例", "Delete instance")}</Button></div></section>
     {deleting && <ConfirmDangerDialog title={t("删除监控实例", "Delete monitoring instance")} description={t("移除 {0} 的监控数据和绑定凭据。该客户端需要重新配对才能再次接入。", "Remove monitoring data and bound credentials for {0}. The client must pair again to reconnect.", [host.name])}
       pending={pending} onClose={() => { if (!mutation.current) setDeleting(false); }} onConfirm={() => void remove()} />}

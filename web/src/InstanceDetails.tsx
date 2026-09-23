@@ -40,7 +40,7 @@ export function InstanceDetails({ instanceId, refreshSignal, changed, removed }:
   const instance = response.instances.find(item => item.request_id === instanceId || item.instance_id === instanceId);
   if (!instance) return <EmptyState>{t("所选实例已不存在，请返回实例列表。", "The selected instance no longer exists. Return to the instance list.")}</EmptyState>;
   const host = response.hosts.find(item => item.id === instance.instance_id);
-  const settings = <InstanceNameSettings requestId={instance.request_id} name={instance.display_name} changed={changed} />;
+  // The request ID owns the settings draft; the host ID owns monitoring state.
   return <div className="sarmg-content-stack">
     <section className="sarmg-content-panel" aria-label={t("配对账户信息", "Pairing account information")}><h2>{instance.display_name}</h2><dl className="host-detail-list">
       <dt>{t("账户名", "Account name")}</dt><dd>{instance.display_name}</dd>
@@ -48,8 +48,9 @@ export function InstanceDetails({ instanceId, refreshSignal, changed, removed }:
       <dt>{t("密码", "Password")}</dt><dd><code>{instance.authorization_code}</code></dd>
       <dt>{t("配对状态", "Pairing status")}</dt><dd>{pairingLabels[instance.status]}</dd>
     </dl></section>
-    {host ? <HostDetails key={instance.instance_id} hostId={instance.instance_id} refreshSignal={refreshSignal} removed={removed} settings={settings} />
-      : <><section className="sarmg-content-panel"><h2>{t("监控状态", "Monitoring status")}</h2><p>{instance.status === "pending" ? t("实例尚未配对，完成客户端配对后将显示监控详情。", "This instance is not paired yet. Monitoring details will appear after client pairing.") : t("正在等待客户端首次上报监控数据。", "Waiting for the client’s first monitoring report.")}</p></section>{settings}</>}
+    <InstanceNameSettings requestId={instance.request_id} name={instance.display_name} changed={changed} />
+    {host ? <HostDetails key={instance.instance_id} hostId={instance.instance_id} refreshSignal={refreshSignal} removed={removed} />
+      : <section className="sarmg-content-panel"><h2>{t("监控状态", "Monitoring status")}</h2><p>{instance.status === "pending" ? t("实例尚未配对，完成客户端配对后将显示监控详情。", "This instance is not paired yet. Monitoring details will appear after client pairing.") : t("正在等待客户端首次上报监控数据。", "Waiting for the client’s first monitoring report.")}</p></section>}
   </div>;
 }
 
