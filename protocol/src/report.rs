@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// Current schema emitted by the Client and accepted by the Server.
-pub const CLIENT_REPORT_SCHEMA_VERSION: u16 = 2;
+pub const CLIENT_REPORT_SCHEMA_VERSION: u16 = 3;
 
 /// Maximum compact JSON request body accepted by the report endpoint.
 pub const CLIENT_REPORT_MAX_BODY_BYTES: usize = 512 * 1024;

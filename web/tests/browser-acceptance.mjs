@@ -37,7 +37,7 @@ function bucket(start, cpu, memory) {
     max_temperature_celsius: absent, gpu_utilization_percent: absent, gpu_memory_usage_percent: absent, cpu_frequency_mhz: absent, gpu_power_watts: absent, gpu_core_clock_mhz: absent, max_fan_rpm: absent, max_disk_temperature_celsius: absent, max_disk_percentage_used: absent };
 }
 function latestReport() {
-  return { schema_version: 2, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
+  return { schema_version: 3, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
     system: { hardware: { collected_at: "2026-09-04T00:00:00Z", cpu: {model:"Modern CPU",frequency_mhz:4200,per_core_frequency_mhz:[4200,null],load_average:[0.1,0.2,0.3]},
       networks: [{name:"eth0",ip_addresses:["192.0.2.1/24"],link_speed_mbps:2500}, {name:"aux0",ip_addresses:["198.51.100.1/24"],link_speed_mbps:1000}],
       physical_networks: [{id:"pci-0000:03:00.0",name:"Intel I225-V",interface_name:"eth0",mac_address:"02:00:00:00:00:01",link_speed_mbps:2500,source:"linux-sysfs-net-device"}],

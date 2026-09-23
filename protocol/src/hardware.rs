@@ -1,4 +1,4 @@
-//! Optional schema-v2 hardware inventory and telemetry. Unknown readings stay null.
+//! Schema-v3 hardware inventory and telemetry. Unknown readings stay null.
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +14,6 @@ pub struct HardwareSnapshot {
     pub cpu: CpuHardware,
     /// Interface attributes; these do not prove that an interface is a physical adapter.
     pub networks: Vec<NetworkHardware>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub physical_networks: Vec<PhysicalNetworkAdapter>,
     pub sensors: Vec<HardwareSensor>,
     pub disk_health: Vec<DiskHealth>,
