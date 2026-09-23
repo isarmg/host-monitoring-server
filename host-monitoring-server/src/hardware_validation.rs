@@ -12,6 +12,7 @@ pub(crate) fn validate(h: &HardwareSnapshot, report_time: DateTime<Utc>) -> Resu
     if h.collected_at > report_time
         || h.sensors.len() > MAX_HARDWARE_SENSORS
         || h.networks.len() > MAX_HARDWARE_NETWORKS
+        || h.physical_networks.len() > MAX_HARDWARE_NETWORKS
         || h.disk_health.len() > MAX_HARDWARE_DISKS
         || h.cpu.per_core_frequency_mhz.len() > CLIENT_REPORT_MAX_CPU_CORES
         || !optional_text(&h.cpu.model)
@@ -46,6 +47,19 @@ pub(crate) fn validate(h: &HardwareSnapshot, report_time: DateTime<Utc>) -> Resu
             || !number(n.link_speed_mbps)
             || n.ip_addresses.len() > 64
             || !n.ip_addresses.iter().all(|s| text(s) && valid_address(s))
+        {
+            return Err(invalid());
+        }
+    }
+    let mut adapter_ids = std::collections::HashSet::new();
+    for n in &h.physical_networks {
+        if !text(&n.id)
+            || !text(&n.name)
+            || !optional_text(&n.interface_name)
+            || !optional_text(&n.mac_address)
+            || !text(&n.source)
+            || !number(n.link_speed_mbps)
+            || !adapter_ids.insert((&n.source, &n.id))
         {
             return Err(invalid());
         }

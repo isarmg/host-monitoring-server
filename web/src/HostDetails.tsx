@@ -223,9 +223,8 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
     ...(hardware ? [
       { title: t("硬件传感器", "Hardware sensors"), records: hardware.sensors.map(sensor => ({ id: sensor.id, label: sensor.label, [String(sensor.kind)]: sensor.value, source: sensor.source })), empty: t("未发现可读硬件传感器", "No readable hardware sensors") },
       { title: t("磁盘健康", "Disk health"), records: hardware.disk_health, empty: t("暂无 SMART 数据，请查看采集诊断", "No SMART data yet; see collection diagnostics") },
-      ...(unmatchedHardware.length ? [{ title: t("网络硬件", "Network hardware"), records: unmatchedHardware, empty: t("未发现网卡", "No network adapters") }] : []),
     ] : []),
-    { title: t("网络接口", "Network interfaces"), records: interfaces, empty: t("未发现网络接口", "No network interfaces reported") },
+    { title: t("网络接口", "Network interfaces"), records: [...interfaces, ...unmatchedHardware], empty: t("未发现网络接口", "No network interfaces reported") },
     { title: t("磁盘", "Disks"), records: report.system.disks.map(diskDisplayRecord), empty: t("未发现磁盘", "No disks reported") },
     { title: t("温度传感器", "Temperature sensors"), records: report.system.temperatures, empty: t("未发现温度传感器", "No temperature sensors reported") },
     { title: t("显卡", "GPUs"), records: gpuDisplayRecords(report.system.gpus), empty: t("未发现显卡", "No GPUs reported") },
@@ -233,6 +232,7 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
   return <section className="sarmg-content-stack" aria-labelledby="latest-devices-heading"><div className="sarmg-content-panel"><h2 id="latest-devices-heading">{t("最新设备信息", "Latest device information")}</h2><p>{t("以下数值来自最新一份报告，采集时间：{0}", "These values come from the latest report, collected at {0}.", [formatTime(report.collected_at)])}</p></div>
     <div className="host-device-grid"><SnapshotCard title="CPU" record={{ ...report.system.cpu, ...(hardware?.cpu ?? {}) }} /><SnapshotCard title={t("内存", "RAM")} record={report.system.memory} /><SnapshotCard title={t("客户端状态", "Client health")} record={{ uptime_seconds: report.system.uptime_seconds, ...report.client }} /></div>
     {hardware && <p>{t("硬件信息采集时间：{0}；磁盘健康保留其独立采集时间。", "Hardware collected at {0}; disk health includes its own collection time.", [formatTime(hardware.collected_at)])}</p>}
+    <section className="sarmg-content-panel"><h3>{t("网络硬件", "Network hardware")}</h3>{hardware?.physical_networks?.length ? <div className="host-device-grid">{hardware.physical_networks.map(adapter => <SnapshotCard key={String(adapter.source) + ":" + String(adapter.id)} title={adapter.name ?? adapter.id} record={adapter} />)}</div> : <p>{t("当前报告未提供可确认的物理网卡信息。", "The current report does not provide verified physical network adapter information.")}</p>}</section>
     {groups.map(group => <section className="sarmg-content-panel" key={group.title}><h3>{group.title}</h3>{group.records.length ? <div className="host-device-grid">{group.records.map((record, index) => <SnapshotCard key={`${group.title}-${index}`} title={record.name ?? record.label ?? record.id ?? `${group.title} ${index + 1}`} record={record} />)}</div> : <p>{group.empty}</p>}</section>)}
     <section className="sarmg-content-panel"><h3>{t("采集能力与诊断", "Collection capabilities and diagnostics")}</h3><div className="host-device-grid">{report.capabilities.map(capability => <article className="host-device-card" key={capability.name}><h4>{displayLabel(capability.name)}</h4><dl className="host-device-details"><dt>{t("状态", "Status")}</dt><dd>{capability.available ? t("可用", "Available") : t("不可用", "Unavailable")}</dd><dt>{t("来源", "Source")}</dt><dd>{capability.source}</dd>{capability.error_kind && <><dt>{t("原因", "Reason")}</dt><dd>{displayLabel(capability.error_kind)}</dd></>}{capability.message && <><dt>{t("说明", "Details")}</dt><dd>{capability.message}</dd></>}</dl></article>)}</div></section>
   </section>;
@@ -305,7 +305,7 @@ function SnapshotCard({ title, record }: { title: unknown; record: Record<string
 const metricLabels: Record<string, readonly [string, string]> = {
   model: ["型号", "Model"], frequency_mhz: ["平均频率", "Mean frequency"], max_frequency_mhz: ["硬件最高频率", "Maximum hardware frequency"],
   per_core_frequency_mhz: ["各核心频率", "Per-core frequencies"], load_average: ["负载（1/5/15 分钟）", "Load (1/5/15 minutes)"],
-  mac_address: ["MAC 地址", "MAC address"], ip_addresses: ["IP 地址", "IP addresses"], mtu: ["MTU", "MTU"], link_speed_mbps: ["链路速率", "Link speed"], operational_state: ["链路状态", "Link state"],
+  mac_address: ["MAC 地址", "MAC address"], ip_addresses: ["IP 地址", "IP addresses"], interface_name: ["接口名称", "Interface name"], mtu: ["MTU", "MTU"], link_speed_mbps: ["链路速率", "Link speed"], operational_state: ["链路状态", "Link state"],
   fan_rpm: ["风扇转速", "Fan speed"], voltage_volts: ["电压", "Voltage"], current_amps: ["电流", "Current"], energy_joules: ["累计能量", "Energy"],
   device: ["物理设备", "Physical device"], serial_number: ["序列号", "Serial number"], protocol: ["接口协议", "Protocol"], collected_at: ["采集时间", "Collected at"],
   healthy: ["SMART 健康检查通过", "SMART health passed"], percentage_used: ["NVMe 寿命已消耗", "NVMe endurance used"], available_spare_percent: ["可用备用空间", "Available spare"], critical_warning: ["NVMe 严重警告位掩码", "NVMe critical warning bits"],

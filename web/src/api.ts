@@ -29,6 +29,7 @@ export type HardwareSnapshot = {
   collected_at: string;
   cpu: Record<string, unknown>;
   networks: Record<string, unknown>[];
+  physical_networks?: Record<string, unknown>[];
   sensors: Record<string, unknown>[];
   disk_health: Record<string, unknown>[];
 };
@@ -282,9 +283,12 @@ function isClientReport(value: unknown): value is ClientReport {
   if (Object.hasOwn(value.system, "hardware")) {
     systemKeys.push("hardware");
     const h = value.system.hardware;
-    if (!isRecordWithExactKeys(h, ["collected_at", "cpu", "networks", "sensors", "disk_health"])
+    const hardwareKeys = ["collected_at", "cpu", "networks", "sensors", "disk_health"];
+    if (isRecord(h) && Object.hasOwn(h, "physical_networks")) hardwareKeys.push("physical_networks");
+    if (!isRecordWithExactKeys(h, hardwareKeys)
       || !isUtcTimestamp(h.collected_at) || !isRecord(h.cpu)
       || !Array.isArray(h.networks) || !h.networks.every(isRecord)
+      || (Object.hasOwn(h, "physical_networks") && (!Array.isArray(h.physical_networks) || !h.physical_networks.every(isRecord)))
       || !Array.isArray(h.sensors) || !h.sensors.every(isRecord)
       || !Array.isArray(h.disk_health) || !h.disk_health.every(isRecord)) return false;
   }

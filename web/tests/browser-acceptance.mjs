@@ -40,6 +40,7 @@ function latestReport() {
   return { schema_version: 2, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
     system: { hardware: { collected_at: "2026-09-04T00:00:00Z", cpu: {model:"Modern CPU",frequency_mhz:4200,per_core_frequency_mhz:[4200,null],load_average:[0.1,0.2,0.3]},
       networks: [{name:"eth0",ip_addresses:["192.0.2.1/24"],link_speed_mbps:2500}, {name:"aux0",ip_addresses:["198.51.100.1/24"],link_speed_mbps:1000}],
+      physical_networks: [{id:"pci-0000:03:00.0",name:"Intel I225-V",interface_name:"eth0",mac_address:"02:00:00:00:00:01",link_speed_mbps:2500,source:"linux-sysfs-net-device"}],
       sensors: [{id:"fan1",label:"CPU Fan",kind:"fan_rpm",value:1200,source:"linux-hwmon"}],
       disk_health: [{device:"/dev/nvme0",model:"NVMe SSD",healthy:false,percentage_used:105,media_errors:"9007199254740993",collected_at:"2026-09-04T00:00:00Z",source:"smartctl-json"}] }, uptime_seconds: 90061, cpu: { usage_percent: 12.5, logical_count: 8, physical_count: 4, per_core_percent: [10, 15] }, memory: { total_bytes: 17179869184, used_bytes: 8589934592, available_bytes: 8589934592, swap_total_bytes: 0, swap_used_bytes: 0 },
       networks: [{ name: "eth0", received_bytes_total: 1024, transmitted_bytes_total: 2048, received_bytes_per_second: 128, transmitted_bytes_per_second: 256, packets_received_total: 10, packets_transmitted_total: 20, receive_errors_total: 0, transmit_errors_total: 0 }],
@@ -171,12 +172,15 @@ try {
       await expect(page.getByText("9007199254740993", {exact:true})).toBeVisible();
       await expect(page.getByText("192.0.2.1/24", {exact:true})).toBeVisible();
       const networkSection = page.getByRole("heading", { name: "网络接口", exact: true }).locator("..");
-      await expect(networkSection.locator(".host-device-card")).toHaveCount(1);
-      await expect(networkSection.locator(".host-device-card")).toContainText("192.0.2.1/24");
-      await expect(networkSection.locator(".host-device-card")).toContainText("128 B/秒");
-      const unmatchedNetwork = page.getByRole("heading", { name: "网络硬件", exact: true }).locator("..");
-      await expect(unmatchedNetwork.locator(".host-device-card")).toHaveCount(1);
-      await expect(unmatchedNetwork.locator(".host-device-card")).toContainText("aux0");
+      await expect(networkSection.locator(".host-device-card")).toHaveCount(2);
+      const eth0 = networkSection.locator(".host-device-card").filter({ has: page.getByRole("heading", { name: "eth0", exact: true }) });
+      await expect(eth0).toContainText("192.0.2.1/24");
+      await expect(eth0).toContainText("128 B/秒");
+      await expect(networkSection.locator(".host-device-card").filter({ has: page.getByRole("heading", { name: "aux0", exact: true }) })).toContainText("198.51.100.1/24");
+      const physicalNetwork = page.getByRole("heading", { name: "网络硬件", exact: true }).locator("..");
+      await expect(physicalNetwork.locator(".host-device-card")).toHaveCount(1);
+      await expect(physicalNetwork).toContainText("Intel I225-V");
+      await expect(physicalNetwork).toContainText("pci-0000:03:00.0");
       await page.getByRole("heading", { name: "历史趋势", exact: true }).waitFor();
       await page.getByText("页面最近更新", { exact: true }).waitFor();
       await expect.poll(() => detailRequests).toBeGreaterThanOrEqual(2);

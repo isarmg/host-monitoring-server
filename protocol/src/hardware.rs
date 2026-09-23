@@ -12,7 +12,10 @@ pub const MAX_HARDWARE_TEXT: usize = 255;
 pub struct HardwareSnapshot {
     pub collected_at: DateTime<Utc>,
     pub cpu: CpuHardware,
+    /// Interface attributes; these do not prove that an interface is a physical adapter.
     pub networks: Vec<NetworkHardware>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub physical_networks: Vec<PhysicalNetworkAdapter>,
     pub sensors: Vec<HardwareSensor>,
     pub disk_health: Vec<DiskHealth>,
 }
@@ -40,6 +43,17 @@ pub struct NetworkHardware {
     pub mtu: Option<u64>,
     pub link_speed_mbps: Option<f64>,
     pub operational_state: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PhysicalNetworkAdapter {
+    pub id: String,
+    pub name: String,
+    pub interface_name: Option<String>,
+    pub mac_address: Option<String>,
+    pub link_speed_mbps: Option<f64>,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

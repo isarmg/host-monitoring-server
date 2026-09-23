@@ -678,6 +678,7 @@ async fn current_sqlite_supports_pair_activate_report_rename_and_delete() {
             ..Default::default()
         },
         networks: vec![],
+        physical_networks: vec![],
         sensors: vec![],
         disk_health: vec![],
     });
@@ -808,6 +809,14 @@ fn hardware_validation_rejects_old_protocol_and_invalid_readings() {
             ..Default::default()
         },
         networks: vec![],
+        physical_networks: vec![PhysicalNetworkAdapter {
+            id: "pci-0000:03:00.0".into(),
+            name: "Intel I225-V".into(),
+            interface_name: Some("eth0".into()),
+            mac_address: Some("02:00:00:00:00:01".into()),
+            link_speed_mbps: Some(2500.0),
+            source: "linux-sysfs-net-device".into(),
+        }],
         sensors: vec![HardwareSensor {
             id: "fan1".into(),
             label: "CPU fan".into(),
@@ -829,6 +838,22 @@ fn hardware_validation_rejects_old_protocol_and_invalid_readings() {
     assert_eq!(summary.max_fan_rpm, Some(1200.0));
     assert_eq!(summary.max_disk_percentage_used, Some(105.0));
     assert_eq!(summary.max_disk_temperature_celsius, Some(42.0));
+    let mut duplicate = value.clone();
+    let adapter = duplicate
+        .system
+        .hardware
+        .as_ref()
+        .unwrap()
+        .physical_networks[0]
+        .clone();
+    duplicate
+        .system
+        .hardware
+        .as_mut()
+        .unwrap()
+        .physical_networks
+        .push(adapter);
+    assert!(model::validate_report(&duplicate).is_err());
     for invalid in [f64::NAN, f64::INFINITY, -1.0] {
         value.system.hardware.as_mut().unwrap().sensors[0].value = invalid;
         assert!(model::validate_report(&value).is_err());
