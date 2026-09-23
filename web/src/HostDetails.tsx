@@ -194,14 +194,21 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
     if (!Number.isFinite(timestamp) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
     return Math.max(0, Math.min(100, (timestamp - start) * 100 / (end - start)));
   };
-  const paths = (key: HistoryMetric) => {
-    const result: string[] = []; let current: string[] = [];
+  const stepMilliseconds = (response?.step_seconds ?? 0) * 1000;
+  const segments = (key: HistoryMetric) => {
+    type ChartPoint = { x: number; y: number };
+    const result: ChartPoint[][] = []; let current: ChartPoint[] = [];
+    let previousStart: number | null = null;
     for (const point of points) {
       const value = point[key].avg;
-      if (value === null) { if (current.length) result.push(current.join(" ")); current = []; }
-      else current.push(`${xAt(point.start)},${100 - Math.max(0, Math.min(100, value * 100 / ceiling))}`);
+      const start = Date.parse(point.start);
+      if (current.length && (value === null || previousStart === null || start > previousStart + stepMilliseconds)) {
+        result.push(current); current = [];
+      }
+      if (value !== null) current.push({ x: xAt(point.start), y: 100 - Math.max(0, Math.min(100, value * 100 / ceiling)) });
+      previousStart = start;
     }
-    if (current.length) result.push(current.join(" "));
+    if (current.length) result.push(current);
     return result;
   };
   const hasSamples = values.length > 0;
@@ -209,7 +216,9 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
     <div className="host-chart-legend">{lines.map(line => <span key={line.key}><i aria-hidden="true" style={{ background: line.color }} />{line.label}</span>)}</div>
     {!loading && failure === null && !hasSamples ? <p>{t("所选范围没有历史样本", "No historical samples in this range")}</p> : hasSamples ? <svg viewBox="0 0 100 100" role="img" aria-label={t("{0} 历史图", "{0} history chart", [title])} preserveAspectRatio="none">
       {[25, 50, 75].map(y => <line key={y} x1="0" x2="100" y1={y} y2={y} className="host-chart-gridline" vectorEffect="non-scaling-stroke" />)}
-      {lines.flatMap(line => paths(line.key).map((path, index) => <polyline key={`${line.key}-${index}`} points={path} fill="none" stroke={line.color} vectorEffect="non-scaling-stroke" />))}
+      {lines.flatMap(line => segments(line.key).map((segment, index) => segment.length === 1
+        ? <circle key={`${line.key}-${index}`} cx={segment[0].x} cy={segment[0].y} r="0.8" fill={line.color} />
+        : <polyline key={`${line.key}-${index}`} points={segment.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke={line.color} vectorEffect="non-scaling-stroke" />))}
     </svg> : <p>{loading ? t("正在读取…", "Loading…") : t("暂时不可用", "Unavailable")}</p>}
     {hasSamples && <p className="host-chart-scale">{unit === "bytes" ? t("峰值 {0}/秒", "Peak {0}/s", [formatBytes(ceiling)]) : `${t("纵轴", "Vertical axis")} 0–${ceiling.toLocaleString()} ${unit === "percent" ? "%" : unit}`}</p>}
   </section>;

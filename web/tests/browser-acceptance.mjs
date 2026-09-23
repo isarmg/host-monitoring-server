@@ -94,7 +94,8 @@ try {
           await new Promise(resolve => setTimeout(resolve, 2_500));
           body = { host_id: historyMatch[1], requested_from: "2026-09-03T23:00:00Z", requested_to: "2026-09-04T00:00:00Z",
             actual_from: "2026-09-03T23:00:00Z", actual_to: "2026-09-03T23:59:00Z", step_seconds: 5, source: "raw", points: [
-              bucket("2026-09-03T23:00:00Z", 10, 20), bucket("2026-09-03T23:01:00Z", 20, null), bucket("2026-09-03T23:59:00Z", 30, 40),
+              bucket("2026-09-03T23:00:00Z", 10, 20), bucket("2026-09-03T23:00:05Z", 15, 25),
+              bucket("2026-09-03T23:01:00Z", 20, null), bucket("2026-09-03T23:59:00Z", 30, 40),
             ] };
         } else if (detailMatch) {
           detailRequests++; detailActive++; maximumDetailActive = Math.max(maximumDetailActive, detailActive);
@@ -186,8 +187,11 @@ try {
       await expect.poll(() => detailRequests).toBeGreaterThanOrEqual(2);
       assert.equal(maximumDetailActive, 1);
       await expect.poll(() => historyRequests).toBeGreaterThanOrEqual(1);
-      const cpuPoints = page.getByRole("img", { name: "CPU 历史图" }).locator("polyline").first();
-      await expect(cpuPoints).toHaveAttribute("points", /0,90 1\.6666.*?,80 98\.3333.*?,70/);
+      const cpuChart = page.getByRole("img", { name: "CPU 历史图" });
+      await expect(cpuChart.locator("polyline")).toHaveCount(1);
+      await expect(cpuChart.locator("polyline")).toHaveAttribute("points", /^0,90 0\.1388.*?,85$/);
+      await expect(cpuChart.locator("circle")).toHaveCount(2);
+      assert.deepEqual(await cpuChart.locator("circle").evaluateAll(elements => elements.map(element => Number(element.getAttribute("cy")))), [80, 70]);
       await page.getByRole("button", { name: "暂停自动更新（2 秒）", exact: true }).click();
       const beforeManualRefresh = detailRequests;
       await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
