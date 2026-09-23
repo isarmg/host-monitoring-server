@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// Current schema emitted by the Client and accepted by the Server.
-pub const CLIENT_REPORT_SCHEMA_VERSION: u16 = 1;
+pub const CLIENT_REPORT_SCHEMA_VERSION: u16 = 2;
 
 /// Maximum compact JSON request body accepted by the report endpoint.
 pub const CLIENT_REPORT_MAX_BODY_BYTES: usize = 512 * 1024;
@@ -69,6 +69,8 @@ pub struct HostIdentity {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SystemSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hardware: Option<crate::HardwareSnapshot>,
     #[serde(with = "crate::json_u64")]
     pub uptime_seconds: u64,
     pub cpu: CpuSnapshot,
@@ -280,6 +282,7 @@ mod tests {
             },
             interval_seconds: 0.5,
             system: SystemSnapshot {
+                hardware: None,
                 uptime_seconds: 1,
                 cpu: CpuSnapshot {
                     usage_percent: 12.5,

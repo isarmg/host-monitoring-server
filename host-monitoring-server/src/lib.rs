@@ -15,3 +15,5 @@ pub mod telemetry;
 pub fn token_hash(token: &str) -> String {
     sarmg_admin_auth::token_hash_hex(token)
 }
+
+mod hardware_validation;

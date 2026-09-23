@@ -73,6 +73,7 @@ fn report(host_id: Uuid, collected_at: DateTime<Utc>) -> ClientReport {
         host: host(host_id, "linux-updated"),
         interval_seconds: 10.0,
         system: SystemSnapshot {
+            hardware: None,
             uptime_seconds: 60,
             cpu: CpuSnapshot {
                 usage_percent: 42.5,
@@ -668,7 +669,18 @@ async fn current_sqlite_supports_pair_activate_report_rename_and_delete() {
     );
 
     let collected_at = Utc::now() - Duration::seconds(1);
-    let report = report(instance_id, collected_at);
+    let mut report = report(instance_id, collected_at);
+    report.system.hardware = Some(host_protocol::HardwareSnapshot {
+        collected_at,
+        cpu: host_protocol::CpuHardware {
+            model: Some("Modern CPU".into()),
+            frequency_mhz: Some(4200.0),
+            ..Default::default()
+        },
+        networks: vec![],
+        sensors: vec![],
+        disk_health: vec![],
+    });
     let metrics = model::validate_report(&report).expect("valid report fixture");
     let (accepted, received_at) = store::store_report(&pool, &report, &client_token_hash, &metrics)
         .await
@@ -684,6 +696,7 @@ async fn current_sqlite_supports_pair_activate_report_rename_and_delete() {
     assert_eq!(summary.last_seen_at, received_at);
     assert_eq!(summary.latest_collected_at, Some(collected_at));
     assert_eq!(summary.metrics.cpu_usage_percent, Some(42.5));
+    assert_eq!(summary.metrics.cpu_frequency_mhz, Some(4200.0));
     assert_eq!(latest, Some(report.clone()));
 
     let clock_rollback = self::report(instance_id, collected_at - Duration::minutes(10));
@@ -779,4 +792,47 @@ async fn current_sqlite_supports_pair_activate_report_rename_and_delete() {
     );
     reopened.close().await;
     std::fs::remove_file(path).expect("remove temporary SQLite database");
+}
+
+#[test]
+fn hardware_validation_rejects_old_protocol_and_invalid_readings() {
+    use host_protocol::*;
+    let mut value = report(Uuid::new_v4(), Utc::now());
+    value.schema_version = 1;
+    assert!(model::validate_report(&value).is_err());
+    value.schema_version = CLIENT_REPORT_SCHEMA_VERSION;
+    value.system.hardware = Some(HardwareSnapshot {
+        collected_at: value.collected_at,
+        cpu: CpuHardware {
+            frequency_mhz: Some(4200.0),
+            ..Default::default()
+        },
+        networks: vec![],
+        sensors: vec![HardwareSensor {
+            id: "fan1".into(),
+            label: "CPU fan".into(),
+            kind: SensorKind::FanRpm,
+            value: 1200.0,
+            source: "test".into(),
+        }],
+        disk_health: vec![DiskHealth {
+            device: "/dev/nvme0".into(),
+            collected_at: value.collected_at,
+            percentage_used: Some(105.0),
+            temperature_celsius: Some(42.0),
+            source: "smartctl-json".into(),
+            ..Default::default()
+        }],
+    });
+    let summary = model::validate_report(&value).unwrap();
+    assert_eq!(summary.cpu_frequency_mhz, Some(4200.0));
+    assert_eq!(summary.max_fan_rpm, Some(1200.0));
+    assert_eq!(summary.max_disk_percentage_used, Some(105.0));
+    assert_eq!(summary.max_disk_temperature_celsius, Some(42.0));
+    for invalid in [f64::NAN, f64::INFINITY, -1.0] {
+        value.system.hardware.as_mut().unwrap().sensors[0].value = invalid;
+        assert!(model::validate_report(&value).is_err());
+    }
+    value.system.hardware.as_mut().unwrap().sensors[0].kind = SensorKind::VoltageVolts;
+    assert!(model::validate_report(&value).is_ok()); // negative rails are valid
 }

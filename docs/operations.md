@@ -6,7 +6,7 @@ Server 的唯一正式平台/target 是 x86_64 glibc Linux / `x86_64-unknown-lin
 Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-server`。
 
 ```text
-/opt/isarmg/host-monitoring/releases/0.9.25/   root 持有、只读发行树
+/opt/isarmg/host-monitoring/releases/0.9.26/   root 持有、只读发行树
 /etc/isarmg/host-monitoring.env              0600 生产配置
 /var/lib/isarmg/host-monitoring/db/host-monitoring.sqlite3    SQLite 当前数据库
 /run/isarmg/host-monitoring/                 systemd runtime
@@ -15,8 +15,8 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `host-monitoring-
 systemd 以 `isarmg-host` 运行：
 
 ```text
-ExecStart=/opt/isarmg/host-monitoring/releases/0.9.25/bin/host-monitoring-server \
-  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.25
+ExecStart=/opt/isarmg/host-monitoring/releases/0.9.26/bin/host-monitoring-server \
+  serve-release --root /opt/isarmg/host-monitoring/releases/0.9.26
 ```
 
 不创建 `current` 或 `latest`。发行树不能由服务账户、group 或 world 写入，也不能包含 symlink、特殊
@@ -24,7 +24,7 @@ ExecStart=/opt/isarmg/host-monitoring/releases/0.9.25/bin/host-monitoring-server
 
 ## 2. 构建 Server 发行物
 
-在 x86_64 glibc Linux 上，从干净、annotated `v0.9.25` 精确指向 HEAD 的 checkout，向仓库外已存在目录
+在 x86_64 glibc Linux 上，从干净、annotated `v0.9.26` 精确指向 HEAD 的 checkout，向仓库外已存在目录
 构建：
 
 ```bash
@@ -154,7 +154,7 @@ readiness 都要求该记录严格匹配 `server-control-plane`。历史版本�
 
 ```bash
 host-monitoring-server identity
-host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.25
+host-monitoring-server verify-release --root /opt/isarmg/host-monitoring/releases/0.9.26
 host-monitoring-server doctor
 host-monitoring-server admin-create --database-url sqlite:///path/app.db
 printf '%s\n' "$NEW_ADMIN_PASSWORD" | host-monitoring-server admin-reset-password \
@@ -211,7 +211,7 @@ WiX 4 MSI 安装 Windows Service、交互式 `host-monitor` CLI 和 maintenance 
 主体；管理员在终端使用 CLI 完成配置与配对，并通过受保护本机通道读取运行状态。构建/验收使用：
 
 ```powershell
-packaging\windows\wix\build-msi.cmd 0.9.25 `
+packaging\windows\wix\build-msi.cmd 0.9.26 `
   target\x86_64-pc-windows-msvc\release\host-monitor.exe `
   target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe
 powershell -File packaging\windows\tests\Test-WixAuthoring.ps1
@@ -252,9 +252,9 @@ notarization/stapling，并保存签名者、时间戳、摘要和验证结果�
 
 ## 9. 数据库身份与当前不支持的数据操作
 
-Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、格式版本 `0.9.20`、
-schema revision `6` 与 SHA-256
-`dc97f6526439673f7a633a15a2557e758e922bc49749f8b9562ee8ee3ed7048d`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
+Server 只创建当前库。`product_metadata` 必须精确绑定 application `host-monitoring`、格式版本 `0.9.26`、
+schema revision `7` 与 SHA-256
+`5c4a32f3f1813e6e6ef528b55e25e912bfe0191f79332ad5538943746c8f17a3`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
 必须一致。当前 DDL 中管理员列是 `_sarmg_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical
 username、非空 password hash、`active IN (0,1)`，`serve`/`admin-create` 加载已有行时再用 Foundation
 primitive 验证 username 和完整 current Argon2id 参数；DDL 还要求 `session_version > 0`，形成存储形状与

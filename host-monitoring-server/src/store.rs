@@ -14,7 +14,7 @@ use crate::model::{
     host_status,
 };
 
-const HISTORY_METRICS: [&str; 9] = [
+const HISTORY_METRICS: [&str; 15] = [
     "cpu_usage_percent",
     "memory_usage_percent",
     "network_received_bytes_per_second",
@@ -24,6 +24,12 @@ const HISTORY_METRICS: [&str; 9] = [
     "max_temperature_celsius",
     "gpu_utilization_percent",
     "gpu_memory_usage_percent",
+    "cpu_frequency_mhz",
+    "gpu_power_watts",
+    "gpu_core_clock_mhz",
+    "max_fan_rpm",
+    "max_disk_temperature_celsius",
+    "max_disk_percentage_used",
 ];
 
 pub async fn ready(pool: &SqlitePool) -> bool {
@@ -37,7 +43,7 @@ pub async fn retention_ready(pool: &SqlitePool) -> bool {
                    WHERE name='aggregated_at') \
            AND EXISTS(SELECT 1 FROM sqlite_master \
                       WHERE type='table' AND name='client_metric_hourly_aggregates') \
-           AND (SELECT COUNT(*) FROM pragma_table_info('client_metric_hourly_aggregates'))=42",
+           AND (SELECT COUNT(*) FROM pragma_table_info('client_metric_hourly_aggregates'))=66",
     )
     .fetch_one(pool)
     .await
@@ -915,15 +921,15 @@ async fn store_report_in_transaction(
              report_id,host_id,schema_version,collected_at,received_at,interval_seconds,payload,
              cpu_usage_percent,memory_usage_percent,network_received_bytes_per_second,
              network_transmitted_bytes_per_second,disk_read_bytes_per_second,disk_written_bytes_per_second,
-             max_temperature_celsius,gpu_utilization_percent,gpu_memory_usage_percent)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             max_temperature_celsius,gpu_utilization_percent,gpu_memory_usage_percent,cpu_frequency_mhz,gpu_power_watts,gpu_core_clock_mhz,max_fan_rpm,max_disk_temperature_celsius,max_disk_percentage_used)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(report_id) DO NOTHING RETURNING received_at"#,
     ).bind(report_id).bind(host_id).bind(i32::from(report.schema_version)).bind(report.collected_at)
       .bind(received_at).bind(report.interval_seconds).bind(payload)
       .bind(metrics.cpu_usage_percent).bind(metrics.memory_usage_percent)
       .bind(metrics.network_received_bytes_per_second).bind(metrics.network_transmitted_bytes_per_second)
       .bind(metrics.disk_read_bytes_per_second).bind(metrics.disk_written_bytes_per_second)
-      .bind(metrics.max_temperature_celsius).bind(metrics.gpu_utilization_percent).bind(metrics.gpu_memory_usage_percent)
+      .bind(metrics.max_temperature_celsius).bind(metrics.gpu_utilization_percent).bind(metrics.gpu_memory_usage_percent).bind(metrics.cpu_frequency_mhz).bind(metrics.gpu_power_watts).bind(metrics.gpu_core_clock_mhz).bind(metrics.max_fan_rpm).bind(metrics.max_disk_temperature_celsius).bind(metrics.max_disk_percentage_used)
       .fetch_optional(&mut **tx).await?;
     let Some(row) = inserted else {
         let existing: Option<(Uuid, DateTime<Utc>)> = sqlx::query_as(
@@ -1007,13 +1013,19 @@ struct HostRow {
     max_temperature_celsius: Option<f64>,
     gpu_utilization_percent: Option<f64>,
     gpu_memory_usage_percent: Option<f64>,
+    cpu_frequency_mhz: Option<f64>,
+    gpu_power_watts: Option<f64>,
+    gpu_core_clock_mhz: Option<f64>,
+    max_fan_rpm: Option<f64>,
+    max_disk_temperature_celsius: Option<f64>,
+    max_disk_percentage_used: Option<f64>,
 }
 
 const HOST_SELECT: &str = r#"SELECT h.host_id,h.name,h.os,h.os_version,h.kernel_version,h.arch,h.client_version,
  h.capabilities,h.registered_at,h.last_seen_at,h.latest_collected_at,h.latest_interval_seconds,
  r.cpu_usage_percent,r.memory_usage_percent,r.network_received_bytes_per_second,
  r.network_transmitted_bytes_per_second,r.disk_read_bytes_per_second,r.disk_written_bytes_per_second,
- r.max_temperature_celsius,r.gpu_utilization_percent,r.gpu_memory_usage_percent
+ r.max_temperature_celsius,r.gpu_utilization_percent,r.gpu_memory_usage_percent,r.cpu_frequency_mhz,r.gpu_power_watts,r.gpu_core_clock_mhz,r.max_fan_rpm,r.max_disk_temperature_celsius,r.max_disk_percentage_used
  FROM monitored_hosts h LEFT JOIN client_metric_reports r ON r.report_id=h.latest_report_id"#;
 
 fn summarize(row: HostRow) -> HostSummary {
@@ -1040,6 +1052,12 @@ fn summarize(row: HostRow) -> HostSummary {
             max_temperature_celsius: row.max_temperature_celsius,
             gpu_utilization_percent: row.gpu_utilization_percent,
             gpu_memory_usage_percent: row.gpu_memory_usage_percent,
+            cpu_frequency_mhz: row.cpu_frequency_mhz,
+            gpu_power_watts: row.gpu_power_watts,
+            gpu_core_clock_mhz: row.gpu_core_clock_mhz,
+            max_fan_rpm: row.max_fan_rpm,
+            max_disk_temperature_celsius: row.max_disk_temperature_celsius,
+            max_disk_percentage_used: row.max_disk_percentage_used,
         },
     }
 }
@@ -1122,6 +1140,12 @@ struct HistoryRow {
     max_temperature_celsius: Option<f64>,
     gpu_utilization_percent: Option<f64>,
     gpu_memory_usage_percent: Option<f64>,
+    cpu_frequency_mhz: Option<f64>,
+    gpu_power_watts: Option<f64>,
+    gpu_core_clock_mhz: Option<f64>,
+    max_fan_rpm: Option<f64>,
+    max_disk_temperature_celsius: Option<f64>,
+    max_disk_percentage_used: Option<f64>,
 }
 
 pub async fn history(
@@ -1143,7 +1167,7 @@ pub async fn history(
     let rows: Vec<HistoryRow> = sqlx::query_as(
         r#"SELECT report_id,collected_at,received_at,cpu_usage_percent,memory_usage_percent,
          network_received_bytes_per_second,network_transmitted_bytes_per_second,disk_read_bytes_per_second,
-         disk_written_bytes_per_second,max_temperature_celsius,gpu_utilization_percent,gpu_memory_usage_percent
+         disk_written_bytes_per_second,max_temperature_celsius,gpu_utilization_percent,gpu_memory_usage_percent,cpu_frequency_mhz,gpu_power_watts,gpu_core_clock_mhz,max_fan_rpm,max_disk_temperature_celsius,max_disk_percentage_used
          FROM client_metric_reports WHERE host_id=?1
            AND (?2 IS NULL OR collected_at >= ?2)
            AND (?3 IS NULL OR collected_at <= ?3)
@@ -1165,6 +1189,12 @@ pub async fn history(
                 max_temperature_celsius: row.max_temperature_celsius,
                 gpu_utilization_percent: row.gpu_utilization_percent,
                 gpu_memory_usage_percent: row.gpu_memory_usage_percent,
+                cpu_frequency_mhz: row.cpu_frequency_mhz,
+                gpu_power_watts: row.gpu_power_watts,
+                gpu_core_clock_mhz: row.gpu_core_clock_mhz,
+                max_fan_rpm: row.max_fan_rpm,
+                max_disk_temperature_celsius: row.max_disk_temperature_celsius,
+                max_disk_percentage_used: row.max_disk_percentage_used,
             },
         })
         .collect();
@@ -1294,6 +1324,12 @@ pub async fn history_series(
             max_temperature_celsius: metric("max_temperature_celsius")?,
             gpu_utilization_percent: metric("gpu_utilization_percent")?,
             gpu_memory_usage_percent: metric("gpu_memory_usage_percent")?,
+            cpu_frequency_mhz: metric("cpu_frequency_mhz")?,
+            gpu_power_watts: metric("gpu_power_watts")?,
+            gpu_core_clock_mhz: metric("gpu_core_clock_mhz")?,
+            max_fan_rpm: metric("max_fan_rpm")?,
+            max_disk_temperature_celsius: metric("max_disk_temperature_celsius")?,
+            max_disk_percentage_used: metric("max_disk_percentage_used")?,
         });
     }
     tx.commit().await?;

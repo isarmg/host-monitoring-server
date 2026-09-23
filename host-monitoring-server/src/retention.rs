@@ -35,7 +35,7 @@ pub const DEFAULT_RETENTION_RUN_MILLISECONDS: u64 = 2_000;
 pub const DEFAULT_RETENTION_YIELD_MILLISECONDS: u64 = 10;
 
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(2);
-const METRIC_NAMES: [&str; 9] = [
+const METRIC_NAMES: [&str; 15] = [
     "cpu_usage_percent",
     "memory_usage_percent",
     "network_received_bytes_per_second",
@@ -45,6 +45,12 @@ const METRIC_NAMES: [&str; 9] = [
     "max_temperature_celsius",
     "gpu_utilization_percent",
     "gpu_memory_usage_percent",
+    "cpu_frequency_mhz",
+    "gpu_power_watts",
+    "gpu_core_clock_mhz",
+    "max_fan_rpm",
+    "max_disk_temperature_celsius",
+    "max_disk_percentage_used",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -468,10 +474,16 @@ struct RawScalarReport {
     max_temperature_celsius: Option<f64>,
     gpu_utilization_percent: Option<f64>,
     gpu_memory_usage_percent: Option<f64>,
+    cpu_frequency_mhz: Option<f64>,
+    gpu_power_watts: Option<f64>,
+    gpu_core_clock_mhz: Option<f64>,
+    max_fan_rpm: Option<f64>,
+    max_disk_temperature_celsius: Option<f64>,
+    max_disk_percentage_used: Option<f64>,
 }
 
 impl RawScalarReport {
-    fn metrics(&self) -> [Option<f64>; 9] {
+    fn metrics(&self) -> [Option<f64>; 15] {
         [
             self.cpu_usage_percent,
             self.memory_usage_percent,
@@ -482,6 +494,12 @@ impl RawScalarReport {
             self.max_temperature_celsius,
             self.gpu_utilization_percent,
             self.gpu_memory_usage_percent,
+            self.cpu_frequency_mhz,
+            self.gpu_power_watts,
+            self.gpu_core_clock_mhz,
+            self.max_fan_rpm,
+            self.max_disk_temperature_celsius,
+            self.max_disk_percentage_used,
         ]
     }
 }
@@ -516,7 +534,7 @@ struct HourlyAggregate {
     interval_start: DateTime<Utc>,
     interval_end: DateTime<Utc>,
     sample_count: i64,
-    metrics: [ScalarAggregate; 9],
+    metrics: [ScalarAggregate; 15],
 }
 
 impl HourlyAggregate {
@@ -527,7 +545,7 @@ impl HourlyAggregate {
             interval_start: row.collected_at,
             interval_end: row.collected_at,
             sample_count: 0,
-            metrics: [ScalarAggregate::default(); 9],
+            metrics: [ScalarAggregate::default(); 15],
         };
         aggregate.record(row);
         aggregate
@@ -555,7 +573,7 @@ async fn aggregate_raw_batch(
                   r.cpu_usage_percent,r.memory_usage_percent,
                   r.network_received_bytes_per_second,r.network_transmitted_bytes_per_second,
                   r.disk_read_bytes_per_second,r.disk_written_bytes_per_second,
-                  r.max_temperature_celsius,r.gpu_utilization_percent,r.gpu_memory_usage_percent
+                  r.max_temperature_celsius,r.gpu_utilization_percent,r.gpu_memory_usage_percent,r.cpu_frequency_mhz,r.gpu_power_watts,r.gpu_core_clock_mhz,r.max_fan_rpm,r.max_disk_temperature_celsius,r.max_disk_percentage_used
              FROM client_metric_reports r
             WHERE r.aggregated_at IS NULL
               AND r.collected_at < ?

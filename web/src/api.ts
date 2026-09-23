@@ -25,6 +25,13 @@ export type Capability = {
 };
 
 export type JsonInteger = number | string;
+export type HardwareSnapshot = {
+  collected_at: string;
+  cpu: Record<string, unknown>;
+  networks: Record<string, unknown>[];
+  sensors: Record<string, unknown>[];
+  disk_health: Record<string, unknown>[];
+};
 export type ClientReport = {
   schema_version: number;
   report_id: string;
@@ -32,6 +39,7 @@ export type ClientReport = {
   host: { id: string; os: string; os_version: string | null; kernel_version: string | null; arch: string; client_version: string };
   interval_seconds: number;
   system: {
+    hardware?: HardwareSnapshot;
     uptime_seconds: JsonInteger;
     cpu: Record<string, unknown>;
     memory: Record<string, unknown>;
@@ -51,6 +59,13 @@ export type HistoryPoint = {
   network_received_bytes_per_second: number | null; network_transmitted_bytes_per_second: number | null;
   disk_read_bytes_per_second: number | null; disk_written_bytes_per_second: number | null;
   max_temperature_celsius: number | null; gpu_utilization_percent: number | null; gpu_memory_usage_percent: number | null;
+  cpu_frequency_mhz: number | null;
+  gpu_power_watts: number | null;
+  gpu_core_clock_mhz: number | null;
+  max_fan_rpm: number | null;
+  max_disk_temperature_celsius: number | null;
+  max_disk_percentage_used: number | null;
+
 };
 export type HistoryResponse = { host_id: string; points: HistoryPoint[] };
 export type MetricAggregate = { count: number; min: number | null; max: number | null; avg: number | null };
@@ -60,6 +75,13 @@ export type HistoryBucket = {
   network_received_bytes_per_second: MetricAggregate; network_transmitted_bytes_per_second: MetricAggregate;
   disk_read_bytes_per_second: MetricAggregate; disk_written_bytes_per_second: MetricAggregate;
   max_temperature_celsius: MetricAggregate; gpu_utilization_percent: MetricAggregate; gpu_memory_usage_percent: MetricAggregate;
+  cpu_frequency_mhz: MetricAggregate;
+  gpu_power_watts: MetricAggregate;
+  gpu_core_clock_mhz: MetricAggregate;
+  max_fan_rpm: MetricAggregate;
+  max_disk_temperature_celsius: MetricAggregate;
+  max_disk_percentage_used: MetricAggregate;
+
 };
 export type HistorySeriesResponse = {
   host_id: string; requested_from: string; requested_to: string; actual_from: string; actual_to: string;
@@ -88,6 +110,13 @@ export type Host = {
   max_temperature_celsius: number | null;
   gpu_utilization_percent: number | null;
   gpu_memory_usage_percent: number | null;
+  cpu_frequency_mhz: number | null;
+  gpu_power_watts: number | null;
+  gpu_core_clock_mhz: number | null;
+  max_fan_rpm: number | null;
+  max_disk_temperature_celsius: number | null;
+  max_disk_percentage_used: number | null;
+
 };
 
 export type HostListResponse = {
@@ -119,6 +148,13 @@ const HOST_KEYS = [
   "max_temperature_celsius",
   "gpu_utilization_percent",
   "gpu_memory_usage_percent",
+  "cpu_frequency_mhz",
+  "gpu_power_watts",
+  "gpu_core_clock_mhz",
+  "max_fan_rpm",
+  "max_disk_temperature_celsius",
+  "max_disk_percentage_used",
+
 ] as const;
 
 const CAPABILITY_KEYS = [
@@ -211,6 +247,12 @@ export function isHost(value: unknown): value is Host {
     isNullableFiniteNumber(value.disk_written_bytes_per_second) &&
     isNullableFiniteNumber(value.max_temperature_celsius) &&
     isNullableFiniteNumber(value.gpu_utilization_percent) &&
+    isNullableFiniteNumber(value.cpu_frequency_mhz)
+    && isNullableFiniteNumber(value.gpu_power_watts)
+    && isNullableFiniteNumber(value.gpu_core_clock_mhz)
+    && isNullableFiniteNumber(value.max_fan_rpm)
+    && isNullableFiniteNumber(value.max_disk_temperature_celsius)
+    && isNullableFiniteNumber(value.max_disk_percentage_used) &&
     isNullableFiniteNumber(value.gpu_memory_usage_percent)
   );
 }
@@ -230,12 +272,23 @@ function isCapability(value: unknown): value is Capability {
 
 function isClientReport(value: unknown): value is ClientReport {
   if (!isRecordWithExactKeys(value, ["schema_version", "report_id", "collected_at", "host", "interval_seconds", "system", "capabilities", "client"])) return false;
-  if (!Number.isSafeInteger(value.schema_version) || !isUuid(value.report_id) || !isUtcTimestamp(value.collected_at)
+  if (value.schema_version !== 2 || !isUuid(value.report_id) || !isUtcTimestamp(value.collected_at)
       || typeof value.interval_seconds !== "number" || !Number.isFinite(value.interval_seconds)) return false;
   if (!isRecordWithExactKeys(value.host, ["id", "os", "os_version", "kernel_version", "arch", "client_version"])
       || !isUuid(value.host.id) || !isText(value.host.os) || !isNullableText(value.host.os_version)
       || !isNullableText(value.host.kernel_version) || !isText(value.host.arch) || !isText(value.host.client_version)) return false;
-  if (!isRecordWithExactKeys(value.system, ["uptime_seconds", "cpu", "memory", "networks", "disks", "temperatures", "gpus"])
+  if (!isRecord(value.system)) return false;
+  const systemKeys = ["uptime_seconds", "cpu", "memory", "networks", "disks", "temperatures", "gpus"];
+  if (Object.hasOwn(value.system, "hardware")) {
+    systemKeys.push("hardware");
+    const h = value.system.hardware;
+    if (!isRecordWithExactKeys(h, ["collected_at", "cpu", "networks", "sensors", "disk_health"])
+      || !isUtcTimestamp(h.collected_at) || !isRecord(h.cpu)
+      || !Array.isArray(h.networks) || !h.networks.every(isRecord)
+      || !Array.isArray(h.sensors) || !h.sensors.every(isRecord)
+      || !Array.isArray(h.disk_health) || !h.disk_health.every(isRecord)) return false;
+  }
+  if (!isRecordWithExactKeys(value.system, systemKeys)
       || !isJsonInteger(value.system.uptime_seconds) || !isRecord(value.system.cpu) || !isRecord(value.system.memory)
       || !Array.isArray(value.system.networks) || !value.system.networks.every(isRecord)
       || !Array.isArray(value.system.disks) || !value.system.disks.every(isRecord)

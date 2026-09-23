@@ -122,7 +122,7 @@
 | HOST-111 | 管理登录请求恰好 `{username,password}`，Session 恰好 `{authenticated,user_id,username,role,csrf_token}` | `sarmg-contracts::{AdministratorLoginRequest,AdministratorSession}`、Foundation 平台路由与 JSON Schema/TS guard | 核心 | 高 | 多余 email/权限字段或缺字段会让 Rust/Web 对身份事实产生分叉 | exact keys、unknown/missing 字段、Rust/TS/Schema fixture、响应不含 email |
 | HOST-112 | 空库只 bootstrap 一个当前管理员；已有账户后不提供新增/列表/角色管理，当前登录管理员可通过 Foundation 账号设置修改自己的 username/password | `store::ensure_admin_user`、Foundation 平台路由与 `web/src/App.tsx` | 核心 | 中 | 删除 bootstrap 会让全新实例无法登录；误称完整账户管理会让运维依赖不存在的生命周期 | 空/非空 `_sarmg_administrators`、第二次 admin-create 零新增、当前账号修改、默认 username `admin` |
 | HOST-113 | `_sarmg_administrators` 使用 `administrator_id/username/password_hash/active/session_version/created_at_micros/updated_at_micros/last_login_at_micros`，无 email/role；username UNIQUE + canonical CHECK，hash 非空，active 只能 0/1，session_version 必须大于 0 | `schema/generated/current_schema.sql::_sarmg_administrators`、`database_schema.rs` | 保障 | 高 | 加 alias/旧列会扩大存储与查询合同；删除 UNIQUE/CHECK 会让重复或非 canonical identity 绕过应用入口 | `pragma_table_info` exact 列、各 DDL CHECK 负例、唯一冲突、启动 Foundation 二次验证、Schema fingerprint |
-| HOST-114 | 当前 DDL 已进入 Schema identity：revision 6、SHA `dc97f6526439673f7a633a15a2557e758e922bc49749f8b9562ee8ee3ed7048d` | `database_schema.rs::{SCHEMA_REVISION,SCHEMA_SHA256}`、`release.json` | 保障 | 高 | 常量/manifest/实际 DDL 任一漂移都会让新库初始化或发行验证失败 | 三处 identity 一致、现场 fingerprint、旧或漂移 DDL 拒绝 |
+| HOST-114 | 当前 DDL 已进入 Schema identity：revision 7、SHA `5c4a32f3f1813e6e6ef528b55e25e912bfe0191f79332ad5538943746c8f17a3` | `database_schema.rs::{SCHEMA_REVISION,SCHEMA_SHA256}`、`release.json` | 保障 | 高 | 常量/manifest/实际 DDL 任一漂移都会让新库初始化或发行验证失败 | 三处 identity 一致、现场 fingerprint、旧或漂移 DDL 拒绝 |
 | HOST-115 | React 登录表单使用 username text/`autocomplete=username`，默认显示 `admin`；认证后展示当前 Session username 与产品管理页面 | Foundation React 登录组件、`web/src/App.tsx` | 建议保留 | 低 | 改回 email input 会与 Foundation request guard 冲突；删除 username 显示会损失身份提示 | 表单 payload、canonical 正例、Session username、登出清空产品数据 |
 | HOST-116 | 管理员密码重置只提供排他维护 CLI，密码从单行有界标准输入读取，不进入 argv | `config.rs::AdminResetPassword`、`main.rs::AdminResetPassword` | 开发运维 | 中 | 删除 reset 会失去受支持的当前改密入口 | maintenance lock、错误 username、Session 全撤销 |
 | HOST-117 | Server 本身监听 HTTP socket，生产浏览器安全依赖可信 TLS reverse proxy；生产 auth policy仍强制 HTTPS Origin 和 Secure `__Host-` Cookie | `config.rs` 的管理员 origin 模式、Foundation HTTP adapter、systemd `BIND` | 保障 | 高 | 绕过 TLS 代理直出会使登录不可用或暴露其他非 Cookie 流量；把 Server 写成内置 TLS 会误配证书 | production HTTPS Origin、Secure Cookie、loopback development、非回环 development 拒绝 |
@@ -177,7 +177,7 @@
 
 ## 4. 当前版本与明确不做
 
-- Server 只接受 `0.9.25` 配置与发行身份以及 `0.9.20` 数据库结构身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
+- Server 只接受 `0.9.26` 配置与发行身份以及 `0.9.26` 数据库结构身份；不包含转换器或平行 alias。Client 配置格式版本独立冻结为 `0.9.4`。
 - 服务端只初始化不存在的当前库，拒绝 metadata-free、非当前 identity 和 Schema drift。
 - 产品不包含 migration、backup、restore；`sarmg-upgrade` 当前也没有 Host 转换边，所以这些操作暂不受支持。
 - Client 不执行远程 Shell、配置修改、补丁管理或自动修复。

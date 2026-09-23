@@ -196,6 +196,12 @@ pub struct MetricSummary {
     pub max_temperature_celsius: Option<f64>,
     pub gpu_utilization_percent: Option<f64>,
     pub gpu_memory_usage_percent: Option<f64>,
+    pub cpu_frequency_mhz: Option<f64>,
+    pub gpu_power_watts: Option<f64>,
+    pub gpu_core_clock_mhz: Option<f64>,
+    pub max_fan_rpm: Option<f64>,
+    pub max_disk_temperature_celsius: Option<f64>,
+    pub max_disk_percentage_used: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -279,6 +285,12 @@ pub struct HistoryBucket {
     pub max_temperature_celsius: MetricAggregate,
     pub gpu_utilization_percent: MetricAggregate,
     pub gpu_memory_usage_percent: MetricAggregate,
+    pub cpu_frequency_mhz: MetricAggregate,
+    pub gpu_power_watts: MetricAggregate,
+    pub gpu_core_clock_mhz: MetricAggregate,
+    pub max_fan_rpm: MetricAggregate,
+    pub max_disk_temperature_celsius: MetricAggregate,
+    pub max_disk_percentage_used: MetricAggregate,
 }
 
 #[derive(Debug, Serialize)]
@@ -328,6 +340,9 @@ pub fn validate_report(report: &ClientReport) -> Result<MetricSummary> {
         return Err(Error::BadRequest(
             "unsupported client report schema_version".into(),
         ));
+    }
+    if let Some(hardware) = &report.system.hardware {
+        crate::hardware_validation::validate(hardware, report.collected_at)?;
     }
     if !report.interval_seconds.is_finite()
         || !(CLIENT_REPORT_MIN_INTERVAL_SECONDS..=CLIENT_REPORT_MAX_INTERVAL_SECONDS as f64)
@@ -631,6 +646,45 @@ fn metric_summary(report: &ClientReport) -> MetricSummary {
             .gpus
             .iter()
             .filter_map(|v| v.utilization_percent)
+            .reduce(f64::max),
+        cpu_frequency_mhz: report
+            .system
+            .hardware
+            .as_ref()
+            .and_then(|h| h.cpu.frequency_mhz),
+        gpu_power_watts: report
+            .system
+            .gpus
+            .iter()
+            .filter_map(|g| g.power_watts)
+            .reduce(f64::max),
+        gpu_core_clock_mhz: report
+            .system
+            .gpus
+            .iter()
+            .filter_map(|g| g.core_clock_mhz)
+            .reduce(f64::max),
+        max_fan_rpm: report
+            .system
+            .hardware
+            .iter()
+            .flat_map(|h| &h.sensors)
+            .filter(|s| s.kind == host_protocol::SensorKind::FanRpm)
+            .map(|s| s.value)
+            .reduce(f64::max),
+        max_disk_temperature_celsius: report
+            .system
+            .hardware
+            .iter()
+            .flat_map(|h| &h.disk_health)
+            .filter_map(|d| d.temperature_celsius)
+            .reduce(f64::max),
+        max_disk_percentage_used: report
+            .system
+            .hardware
+            .iter()
+            .flat_map(|h| &h.disk_health)
+            .filter_map(|d| d.percentage_used)
             .reduce(f64::max),
         gpu_memory_usage_percent: (gpu_memory.1 > 0)
             .then(|| gpu_memory.0 as f64 * 100.0 / gpu_memory.1 as f64),

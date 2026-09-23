@@ -114,6 +114,7 @@ fn report(host_id: Uuid, report_id: Uuid, collected_at: DateTime<Utc>) -> Client
         },
         interval_seconds: 10.0,
         system: SystemSnapshot {
+            hardware: None,
             uptime_seconds: 60,
             cpu: CpuSnapshot {
                 usage_percent: 42.5,

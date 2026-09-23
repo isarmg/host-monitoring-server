@@ -39,6 +39,13 @@ CREATE TABLE client_metric_reports (
     max_temperature_celsius               REAL,
     gpu_utilization_percent               REAL,
     gpu_memory_usage_percent              REAL,
+    cpu_frequency_mhz REAL,
+    gpu_power_watts REAL,
+    gpu_core_clock_mhz REAL,
+    max_fan_rpm REAL,
+    max_disk_temperature_celsius REAL,
+    max_disk_percentage_used REAL,
+
     aggregated_at                         TEXT
 );
 
@@ -176,6 +183,31 @@ CREATE TABLE client_metric_hourly_aggregates (
     gpu_memory_usage_percent_min                  REAL,
     gpu_memory_usage_percent_max                  REAL,
     gpu_memory_usage_percent_avg                  REAL,
+    cpu_frequency_mhz_count INTEGER NOT NULL,
+    cpu_frequency_mhz_min REAL,
+    cpu_frequency_mhz_max REAL,
+    cpu_frequency_mhz_avg REAL,
+    gpu_power_watts_count INTEGER NOT NULL,
+    gpu_power_watts_min REAL,
+    gpu_power_watts_max REAL,
+    gpu_power_watts_avg REAL,
+    gpu_core_clock_mhz_count INTEGER NOT NULL,
+    gpu_core_clock_mhz_min REAL,
+    gpu_core_clock_mhz_max REAL,
+    gpu_core_clock_mhz_avg REAL,
+    max_fan_rpm_count INTEGER NOT NULL,
+    max_fan_rpm_min REAL,
+    max_fan_rpm_max REAL,
+    max_fan_rpm_avg REAL,
+    max_disk_temperature_celsius_count INTEGER NOT NULL,
+    max_disk_temperature_celsius_min REAL,
+    max_disk_temperature_celsius_max REAL,
+    max_disk_temperature_celsius_avg REAL,
+    max_disk_percentage_used_count INTEGER NOT NULL,
+    max_disk_percentage_used_min REAL,
+    max_disk_percentage_used_max REAL,
+    max_disk_percentage_used_avg REAL,
+
 
     updated_at                                    TEXT NOT NULL,
     PRIMARY KEY (host_id, bucket_start),
@@ -189,7 +221,13 @@ CREATE TABLE client_metric_hourly_aggregates (
     CHECK (disk_written_bytes_per_second_count BETWEEN 0 AND sample_count),
     CHECK (max_temperature_celsius_count BETWEEN 0 AND sample_count),
     CHECK (gpu_utilization_percent_count BETWEEN 0 AND sample_count),
-    CHECK (gpu_memory_usage_percent_count BETWEEN 0 AND sample_count)
+    CHECK (gpu_memory_usage_percent_count BETWEEN 0 AND sample_count),
+    CHECK (cpu_frequency_mhz_count BETWEEN 0 AND sample_count),
+    CHECK (gpu_power_watts_count BETWEEN 0 AND sample_count),
+    CHECK (gpu_core_clock_mhz_count BETWEEN 0 AND sample_count),
+    CHECK (max_fan_rpm_count BETWEEN 0 AND sample_count),
+    CHECK (max_disk_temperature_celsius_count BETWEEN 0 AND sample_count),
+    CHECK (max_disk_percentage_used_count BETWEEN 0 AND sample_count)
 );
 
 CREATE INDEX client_metric_hourly_aggregates_retention

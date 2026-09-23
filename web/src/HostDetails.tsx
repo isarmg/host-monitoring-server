@@ -145,11 +145,11 @@ export function HostDetails({ hostId, refreshSignal, removed }: { hostId: string
 }
 
 type HistoryMetric = keyof Pick<HistorySeriesResponse["points"][number],
-  "cpu_usage_percent" | "memory_usage_percent" | "disk_read_bytes_per_second" | "disk_written_bytes_per_second" | "max_temperature_celsius" | "gpu_utilization_percent" | "gpu_memory_usage_percent">;
+  "cpu_usage_percent" | "memory_usage_percent" | "disk_read_bytes_per_second" | "disk_written_bytes_per_second" | "max_temperature_celsius" | "gpu_utilization_percent" | "gpu_memory_usage_percent" | "cpu_frequency_mhz" | "gpu_power_watts" | "gpu_core_clock_mhz" | "max_fan_rpm" | "max_disk_temperature_celsius" | "max_disk_percentage_used">;
 type ChartLine = { key: HistoryMetric; label: string; color: string };
 
 function HistoryChart({ response, hours, loading, failure, retry, changeHours }: { response: HistorySeriesResponse | null; hours: number; loading: boolean; failure: Failure | null; retry(): void; changeHours(value: number): void }) {
-  const charts: Array<{ title: string; unit: "percent" | "bytes"; lines: ChartLine[] }> = [
+  const charts: Array<{ title: string; unit: "percent" | "bytes" | "MHz" | "W" | "RPM" | "℃"; lines: ChartLine[] }> = [
     { title: "CPU", unit: "percent", lines: [
       { key: "cpu_usage_percent", label: t("使用率", "Usage"), color: "#2878b5" },
     ] },
@@ -161,6 +161,12 @@ function HistoryChart({ response, hours, loading, failure, retry, changeHours }:
       { key: "disk_read_bytes_per_second", label: t("读取", "Read"), color: "#2c8c74" },
       { key: "disk_written_bytes_per_second", label: t("写入", "Write"), color: "#d28a37" },
     ] },
+    { title: t("CPU 频率", "CPU frequency"), unit: "MHz", lines: [{ key: "cpu_frequency_mhz", label: t("平均频率", "Mean frequency"), color: "#2878b5" }] },
+    { title: t("GPU 功耗", "GPU power"), unit: "W", lines: [{ key: "gpu_power_watts", label: t("最大设备功耗", "Maximum device power"), color: "#6f58a8" }] },
+    { title: t("GPU 核心频率", "GPU core clock"), unit: "MHz", lines: [{ key: "gpu_core_clock_mhz", label: t("最大设备频率", "Maximum device frequency"), color: "#6f58a8" }] },
+    { title: t("风扇转速", "Fan speed"), unit: "RPM", lines: [{ key: "max_fan_rpm", label: t("最大转速", "Maximum speed"), color: "#2c8c74" }] },
+    { title: t("磁盘温度", "Disk temperature"), unit: "℃", lines: [{ key: "max_disk_temperature_celsius", label: t("最高温度", "Maximum temperature"), color: "#d28a37" }] },
+    { title: t("NVMe 寿命消耗", "NVMe endurance used"), unit: "percent", lines: [{ key: "max_disk_percentage_used", label: t("最大已用比例（可超过 100%）", "Maximum used (may exceed 100%)"), color: "#d28a37" }] },
     { title: "RAM", unit: "percent", lines: [
       { key: "memory_usage_percent", label: t("使用率", "Usage"), color: "#7a5aa6" },
     ] },
@@ -173,7 +179,7 @@ function HistoryChart({ response, hours, loading, failure, retry, changeHours }:
   </section>;
 }
 
-function MetricChartBlock({ title, unit, response, lines, loading, failure }: { title: string; unit: "percent" | "bytes"; response: HistorySeriesResponse | null; lines: ChartLine[]; loading: boolean; failure: Failure | null }) {
+function MetricChartBlock({ title, unit, response, lines, loading, failure }: { title: string; unit: "percent" | "bytes" | "MHz" | "W" | "RPM" | "℃"; response: HistorySeriesResponse | null; lines: ChartLine[]; loading: boolean; failure: Failure | null }) {
   const points = response?.points ?? [];
   const requestedStart = response === null ? Number.NaN : Date.parse(response.requested_from);
   const requestedEnd = response === null ? Number.NaN : Date.parse(response.requested_to);
@@ -181,7 +187,7 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
   const start = Number.isFinite(requestedStart) ? requestedStart : Math.min(...pointTimes);
   const end = Number.isFinite(requestedEnd) ? requestedEnd : Math.max(...pointTimes);
   const values = points.flatMap(point => lines.map(line => point[line.key].avg).filter((value): value is number => value !== null));
-  const ceiling = unit === "percent" ? 100 : Math.max(1, ...values);
+  const ceiling = Math.max(unit === "percent" ? 100 : 1, ...values);
   const xAt = (value: string) => {
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
@@ -204,20 +210,27 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
       {[25, 50, 75].map(y => <line key={y} x1="0" x2="100" y1={y} y2={y} className="host-chart-gridline" vectorEffect="non-scaling-stroke" />)}
       {lines.flatMap(line => paths(line.key).map((path, index) => <polyline key={`${line.key}-${index}`} points={path} fill="none" stroke={line.color} vectorEffect="non-scaling-stroke" />))}
     </svg> : <p>{loading ? t("正在读取…", "Loading…") : t("暂时不可用", "Unavailable")}</p>}
-    {hasSamples && <p className="host-chart-scale">{unit === "bytes" ? t("峰值 {0}/秒", "Peak {0}/s", [formatBytes(ceiling)]) : t("纵轴 0–100", "Vertical axis 0–100")}</p>}
+    {hasSamples && <p className="host-chart-scale">{unit === "bytes" ? t("峰值 {0}/秒", "Peak {0}/s", [formatBytes(ceiling)]) : `${t("纵轴", "Vertical axis")} 0–${ceiling.toLocaleString()} ${unit === "percent" ? "%" : unit}`}</p>}
   </section>;
 }
 
 function LatestDevices({ report }: { report: ClientReport | null }) {
   if (report === null) return <section className="sarmg-content-panel"><h2>{t("最新设备信息", "Latest device information")}</h2><p>{t("等待首次上报", "Waiting for the first report")}</p></section>;
+  const hardware = report.system.hardware;
   const groups: Array<{ title: string; records: Record<string, unknown>[]; empty: string }> = [
+    ...(hardware ? [
+      { title: t("硬件传感器", "Hardware sensors"), records: hardware.sensors.map(sensor => ({ id: sensor.id, label: sensor.label, [String(sensor.kind)]: sensor.value, source: sensor.source })), empty: t("未发现可读硬件传感器", "No readable hardware sensors") },
+      { title: t("磁盘健康", "Disk health"), records: hardware.disk_health, empty: t("暂无 SMART 数据，请查看采集诊断", "No SMART data yet; see collection diagnostics") },
+      { title: t("网络硬件", "Network hardware"), records: hardware.networks, empty: t("未发现网卡", "No network adapters") },
+    ] : []),
     { title: t("网络接口", "Network interfaces"), records: report.system.networks, empty: t("未发现网络接口", "No network interfaces reported") },
     { title: t("磁盘", "Disks"), records: report.system.disks, empty: t("未发现磁盘", "No disks reported") },
     { title: t("温度传感器", "Temperature sensors"), records: report.system.temperatures, empty: t("未发现温度传感器", "No temperature sensors reported") },
     { title: t("显卡", "GPUs"), records: report.system.gpus, empty: t("未发现显卡", "No GPUs reported") },
   ];
   return <section className="sarmg-content-stack" aria-labelledby="latest-devices-heading"><div className="sarmg-content-panel"><h2 id="latest-devices-heading">{t("最新设备信息", "Latest device information")}</h2><p>{t("以下数值来自最新一份报告，采集时间：{0}", "These values come from the latest report, collected at {0}.", [formatTime(report.collected_at)])}</p></div>
-    <div className="host-device-grid"><SnapshotCard title="CPU" record={report.system.cpu} /><SnapshotCard title={t("内存", "RAM")} record={report.system.memory} /><SnapshotCard title={t("客户端状态", "Client health")} record={{ uptime_seconds: report.system.uptime_seconds, ...report.client }} /></div>
+    <div className="host-device-grid"><SnapshotCard title="CPU" record={{ ...report.system.cpu, ...(hardware?.cpu ?? {}) }} /><SnapshotCard title={t("内存", "RAM")} record={report.system.memory} /><SnapshotCard title={t("客户端状态", "Client health")} record={{ uptime_seconds: report.system.uptime_seconds, ...report.client }} /></div>
+    {hardware && <p>{t("硬件信息采集时间：{0}；磁盘健康保留其独立采集时间。", "Hardware collected at {0}; disk health includes its own collection time.", [formatTime(hardware.collected_at)])}</p>}
     {groups.map(group => <section className="sarmg-content-panel" key={group.title}><h3>{group.title}</h3>{group.records.length ? <div className="host-device-grid">{group.records.map((record, index) => <SnapshotCard key={`${group.title}-${index}`} title={record.name ?? record.label ?? record.id ?? `${group.title} ${index + 1}`} record={record} />)}</div> : <p>{group.empty}</p>}</section>)}
     <section className="sarmg-content-panel"><h3>{t("采集能力与诊断", "Collection capabilities and diagnostics")}</h3><div className="host-device-grid">{report.capabilities.map(capability => <article className="host-device-card" key={capability.name}><h4>{displayLabel(capability.name)}</h4><dl className="host-device-details"><dt>{t("状态", "Status")}</dt><dd>{capability.available ? t("可用", "Available") : t("不可用", "Unavailable")}</dd><dt>{t("来源", "Source")}</dt><dd>{capability.source}</dd>{capability.error_kind && <><dt>{t("原因", "Reason")}</dt><dd>{displayLabel(capability.error_kind)}</dd></>}{capability.message && <><dt>{t("说明", "Details")}</dt><dd>{capability.message}</dd></>}</dl></article>)}</div></section>
   </section>;
@@ -228,6 +241,13 @@ function SnapshotCard({ title, record }: { title: unknown; record: Record<string
 }
 
 const metricLabels: Record<string, readonly [string, string]> = {
+  model: ["型号", "Model"], frequency_mhz: ["平均频率", "Mean frequency"], max_frequency_mhz: ["硬件最高频率", "Maximum hardware frequency"],
+  per_core_frequency_mhz: ["各核心频率", "Per-core frequencies"], load_average: ["负载（1/5/15 分钟）", "Load (1/5/15 minutes)"],
+  mac_address: ["MAC 地址", "MAC address"], ip_addresses: ["IP 地址", "IP addresses"], mtu: ["MTU", "MTU"], link_speed_mbps: ["链路速率", "Link speed"], operational_state: ["链路状态", "Link state"],
+  fan_rpm: ["风扇转速", "Fan speed"], voltage_volts: ["电压", "Voltage"], current_amps: ["电流", "Current"], energy_joules: ["累计能量", "Energy"],
+  device: ["物理设备", "Physical device"], serial_number: ["序列号", "Serial number"], protocol: ["接口协议", "Protocol"], collected_at: ["采集时间", "Collected at"],
+  healthy: ["SMART 健康检查通过", "SMART health passed"], percentage_used: ["NVMe 寿命已消耗", "NVMe endurance used"], available_spare_percent: ["可用备用空间", "Available spare"], critical_warning: ["NVMe 严重警告位掩码", "NVMe critical warning bits"],
+  power_on_hours: ["通电小时", "Power-on hours"], power_cycles: ["通电次数", "Power cycles"], unsafe_shutdowns: ["非安全关机", "Unsafe shutdowns"], media_errors: ["介质错误", "Media errors"], bytes_read: ["累计读取", "Total read"], bytes_written: ["累计写入", "Total written"],
   usage_percent: ["使用率", "Usage"], logical_count: ["逻辑核心", "Logical cores"], physical_count: ["物理核心", "Physical cores"], per_core_percent: ["各核心使用率", "Per-core usage"],
   total_bytes: ["总容量", "Total"], used_bytes: ["已使用", "Used"], available_bytes: ["可用", "Available"], swap_total_bytes: ["交换空间总量", "Swap total"], swap_used_bytes: ["交换空间已用", "Swap used"],
   name: ["名称", "Name"], id: ["标识", "ID"], vendor: ["厂商", "Vendor"], mount_point: ["挂载点", "Mount point"], file_system: ["文件系统", "File system"], is_read_only: ["只读", "Read only"],
@@ -239,7 +259,10 @@ const metricLabels: Record<string, readonly [string, string]> = {
 function metricLabel(key: string) { const label = metricLabels[key]; return label ? t(...label) : key.replaceAll("_", " "); }
 function formatMetricValue(key: string, value: unknown): string {
   if (value === null) return t("不可用", "Unavailable");
-  if (Array.isArray(value)) return value.length ? value.map(item => typeof item === "number" ? `${item.toFixed(1)}%` : String(item)).join(" · ") : t("无", "None");
+  if (Array.isArray(value)) return value.length ? value.map(item => item === null ? t("不可用", "Unavailable") : typeof item === "number" ? `${item.toFixed(1)}${key.includes("percent") ? "%" : key.endsWith("_mhz") ? " MHz" : ""}` : String(item)).join(" · ") : t("无", "None");
+  if (key === "collected_at" && typeof value === "string") return formatTime(value);
+  const unit = ({fan_rpm:"RPM",voltage_volts:"V",current_amps:"A",energy_joules:"J",link_speed_mbps:"Mbps"} as Record<string,string>)[key];
+  if (unit && typeof value === "number") return `${value.toLocaleString()} ${unit}`;
   if (typeof value === "boolean") return value ? t("是", "Yes") : t("否", "No");
   if (key === "uptime_seconds" && (typeof value === "number" || typeof value === "string")) return formatDuration(Number(value));
   if (key.includes("bytes")) return `${formatBytes(Number(value))}${key.endsWith("per_second") ? t("/秒", "/s") : ""}`;

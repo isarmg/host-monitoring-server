@@ -601,6 +601,7 @@ fn report(host_id: Uuid, report_id: Uuid, collected_at: DateTime<Utc>) -> Client
         },
         interval_seconds: 10.0,
         system: SystemSnapshot {
+            hardware: None,
             uptime_seconds: 60,
             cpu: CpuSnapshot {
                 usage_percent: 42.5,
@@ -698,5 +699,50 @@ async fn bounded_maintenance_does_not_starve_the_serial_telemetry_writer() {
         .await
         .unwrap();
         assert!(current, "current report was lost during retention");
+    }
+}
+
+#[tokio::test]
+async fn hardware_metrics_survive_hourly_rollup_with_null_coverage() {
+    use sqlx::Row;
+    let db = TestDatabase::new().await;
+    let (host_id, _) = db.add_host("hardware").await;
+    let time = timestamp("2026-01-01T00:10:00Z");
+    let first = Uuid::new_v4();
+    insert_raw(&db.pool, host_id, first, time, Some(1.0), Some(2.0), None).await;
+    insert_raw(
+        &db.pool,
+        host_id,
+        Uuid::new_v4(),
+        time + chrono::Duration::minutes(1),
+        None,
+        None,
+        None,
+    )
+    .await;
+    sqlx::query("UPDATE client_metric_reports SET cpu_frequency_mhz=4200,gpu_power_watts=125,gpu_core_clock_mhz=2400,max_fan_rpm=1200,max_disk_temperature_celsius=42,max_disk_percentage_used=105 WHERE report_id=?")
+        .bind(first).execute(&db.pool).await.unwrap();
+    run_once_at(
+        &db.pool,
+        retention_config(64, 12),
+        timestamp("2026-01-03T00:00:00Z"),
+    )
+    .await
+    .unwrap();
+    let row = sqlx::query("SELECT * FROM client_metric_hourly_aggregates WHERE host_id=?")
+        .bind(host_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    for (name, expected) in [
+        ("cpu_frequency_mhz", 4200.0),
+        ("gpu_power_watts", 125.0),
+        ("gpu_core_clock_mhz", 2400.0),
+        ("max_fan_rpm", 1200.0),
+        ("max_disk_temperature_celsius", 42.0),
+        ("max_disk_percentage_used", 105.0),
+    ] {
+        assert_eq!(row.get::<i64, _>(format!("{name}_count").as_str()), 1);
+        assert_eq!(row.get::<f64, _>(format!("{name}_avg").as_str()), expected);
     }
 }

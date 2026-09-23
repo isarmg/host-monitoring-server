@@ -14,7 +14,7 @@ function host(index) {
     status: "online", capabilities: [], cpu_usage_percent: null, memory_usage_percent: 25,
     network_received_bytes_per_second: null, network_transmitted_bytes_per_second: null,
     disk_read_bytes_per_second: null, disk_written_bytes_per_second: null,
-    max_temperature_celsius: null, gpu_utilization_percent: null, gpu_memory_usage_percent: null,
+    max_temperature_celsius: null, gpu_utilization_percent: null, gpu_memory_usage_percent: null, cpu_frequency_mhz: null, gpu_power_watts: null, gpu_core_clock_mhz: null, max_fan_rpm: null, max_disk_temperature_celsius: null, max_disk_percentage_used: null,
   };
 }
 function instance(index) {
@@ -34,11 +34,14 @@ function bucket(start, cpu, memory) {
     cpu_usage_percent: aggregate(cpu), memory_usage_percent: aggregate(memory),
     network_received_bytes_per_second: absent, network_transmitted_bytes_per_second: absent,
     disk_read_bytes_per_second: absent, disk_written_bytes_per_second: absent,
-    max_temperature_celsius: absent, gpu_utilization_percent: absent, gpu_memory_usage_percent: absent };
+    max_temperature_celsius: absent, gpu_utilization_percent: absent, gpu_memory_usage_percent: absent, cpu_frequency_mhz: absent, gpu_power_watts: absent, gpu_core_clock_mhz: absent, max_fan_rpm: absent, max_disk_temperature_celsius: absent, max_disk_percentage_used: absent };
 }
 function latestReport() {
-  return { schema_version: 1, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
-    system: { uptime_seconds: 90061, cpu: { usage_percent: 12.5, logical_count: 8, physical_count: 4, per_core_percent: [10, 15] }, memory: { total_bytes: 17179869184, used_bytes: 8589934592, available_bytes: 8589934592, swap_total_bytes: 0, swap_used_bytes: 0 },
+  return { schema_version: 2, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
+    system: { hardware: { collected_at: "2026-09-04T00:00:00Z", cpu: {model:"Modern CPU",frequency_mhz:4200,per_core_frequency_mhz:[4200,null],load_average:[0.1,0.2,0.3]},
+      networks: [{name:"eth0",ip_addresses:["192.0.2.1/24"],link_speed_mbps:2500}],
+      sensors: [{id:"fan1",label:"CPU Fan",kind:"fan_rpm",value:1200,source:"linux-hwmon"}],
+      disk_health: [{device:"/dev/nvme0",model:"NVMe SSD",healthy:false,percentage_used:105,media_errors:"9007199254740993",collected_at:"2026-09-04T00:00:00Z",source:"smartctl-json"}] }, uptime_seconds: 90061, cpu: { usage_percent: 12.5, logical_count: 8, physical_count: 4, per_core_percent: [10, 15] }, memory: { total_bytes: 17179869184, used_bytes: 8589934592, available_bytes: 8589934592, swap_total_bytes: 0, swap_used_bytes: 0 },
       networks: [{ name: "eth0", received_bytes_total: 1024, transmitted_bytes_total: 2048, received_bytes_per_second: 128, transmitted_bytes_per_second: 256, packets_received_total: 10, packets_transmitted_total: 20, receive_errors_total: 0, transmit_errors_total: 0 }],
       disks: [{ name: "nvme0n1", mount_point: "/", file_system: "ext4", total_bytes: 1000000000, available_bytes: 500000000, read_bytes_total: 4096, written_bytes_total: 8192, read_bytes_per_second: 512, written_bytes_per_second: 1024, is_read_only: false }],
       temperatures: [{ id: "cpu", label: "CPU Package", celsius: 48.5, max_celsius: 90, critical_celsius: 100, source: "sysfs" }],
@@ -151,6 +154,11 @@ try {
       await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
       await page.getByText("16.0 GiB", { exact: true }).waitFor();
       await expect(page.locator("pre")).toHaveCount(0);
+      await expect(page.getByRole("heading", {name:"硬件传感器",exact:true})).toBeVisible();
+      await expect(page.getByText("1,200 RPM", {exact:true})).toBeVisible();
+      await expect(page.getByText("105.0%", {exact:true})).toBeVisible();
+      await expect(page.getByText("9007199254740993", {exact:true})).toBeVisible();
+      await expect(page.getByText("192.0.2.1/24", {exact:true})).toBeVisible();
       await page.getByRole("heading", { name: "历史趋势", exact: true }).waitFor();
       await page.getByText("页面最近更新", { exact: true }).waitFor();
       await expect.poll(() => detailRequests).toBeGreaterThanOrEqual(2);

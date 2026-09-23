@@ -7,9 +7,11 @@
 
 #![forbid(unsafe_code)]
 
+mod hardware;
 pub mod json_u64;
 mod pairing;
 mod report;
+pub use hardware::*;
 
 pub use pairing::*;
 pub use report::*;
