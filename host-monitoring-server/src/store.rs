@@ -1202,6 +1202,43 @@ pub async fn history(
     Ok(Some(points))
 }
 
+#[derive(FromRow)]
+pub struct ReportLogRow {
+    pub report_id: Uuid,
+    pub collected_at: DateTime<Utc>,
+    pub received_at: DateTime<Utc>,
+}
+
+/// Reports are grouped by server receipt time. Client collection time may be
+/// delayed or clock-skewed, so it cannot define a server calendar day.
+pub async fn report_logs(
+    pool: &SqlitePool,
+    host_id: Uuid,
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> anyhow::Result<Option<Vec<ReportLogRow>>> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM monitored_hosts WHERE host_id=? AND lifecycle_status='active')",
+    )
+    .bind(host_id)
+    .fetch_one(pool)
+    .await?;
+    if !exists {
+        return Ok(None);
+    }
+    let rows = sqlx::query_as(
+        "SELECT report_id,collected_at,received_at FROM client_metric_reports \
+         WHERE host_id=? AND received_at>=? AND received_at<? \
+         ORDER BY received_at DESC,report_id DESC",
+    )
+    .bind(host_id)
+    .bind(from)
+    .bind(to)
+    .fetch_all(pool)
+    .await?;
+    Ok(Some(rows))
+}
+
 pub async fn history_series(
     pool: &SqlitePool,
     host_id: Uuid,

@@ -65,6 +65,83 @@ async fn instance_list_returns_every_instance_in_case_insensitive_name_order() {
     std::fs::remove_file(path).unwrap();
 }
 
+#[tokio::test]
+async fn report_logs_include_every_receipt_in_the_selected_half_open_day() {
+    let path = database_path();
+    let pool = open_database(&path).await;
+    store::initialize_empty(&pool).await.unwrap();
+    let host_id = Uuid::new_v4();
+    let other_host = Uuid::new_v4();
+    let from = DateTime::parse_from_rfc3339("2026-09-23T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let to = from + Duration::days(1);
+    let mut tx = pool.begin().await.unwrap();
+    for id in [host_id, other_host] {
+        sqlx::query(
+            "INSERT INTO monitored_hosts(host_id,name,os,arch,client_version,registered_at,last_seen_at) \
+             VALUES(?,'Test','linux','x86_64','test',?,?)",
+        )
+        .bind(id)
+        .bind(from)
+        .bind(from)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    for index in 0..1001 {
+        sqlx::query(
+            "INSERT INTO client_metric_reports(report_id,host_id,schema_version,collected_at,received_at,interval_seconds) \
+             VALUES(?,?,3,?,?,10)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(host_id)
+        .bind(from - Duration::hours(1))
+        .bind(from + Duration::microseconds(index))
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    for (host, received) in [
+        (host_id, from - Duration::microseconds(1)),
+        (host_id, to),
+        (other_host, from),
+    ] {
+        sqlx::query(
+            "INSERT INTO client_metric_reports(report_id,host_id,schema_version,collected_at,received_at,interval_seconds) \
+             VALUES(?,?,3,?,?,10)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(host)
+        .bind(from - Duration::hours(1))
+        .bind(received)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    tx.commit().await.unwrap();
+
+    let logs = store::report_logs(&pool, host_id, from, to)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(logs.len(), 1001);
+    assert_eq!(
+        logs.first().unwrap().received_at,
+        from + Duration::microseconds(1000)
+    );
+    assert_eq!(logs.last().unwrap().received_at, from);
+    assert!(logs.iter().all(|row| row.collected_at < from));
+    assert!(
+        store::report_logs(&pool, Uuid::new_v4(), from, to)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    pool.close().await;
+    std::fs::remove_file(path).unwrap();
+}
+
 fn report(host_id: Uuid, collected_at: DateTime<Utc>) -> ClientReport {
     ClientReport {
         schema_version: host_protocol::CLIENT_REPORT_SCHEMA_VERSION,

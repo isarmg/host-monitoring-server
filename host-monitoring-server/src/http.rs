@@ -15,7 +15,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{any, get, post},
 };
-use chrono::Utc;
+use chrono::{DateTime, Local, NaiveDate, TimeDelta, TimeZone, Utc};
 use host_protocol::{
     ActivateClientRequest, ActivateClientResponse, ActivatePairingStatus,
     CLIENT_REPORT_MAX_BODY_BYTES, ClientPairingRequest, ClientPairingResponse,
@@ -25,6 +25,7 @@ use host_protocol::{
 use sarmg_admin_auth::AdministratorOriginMode;
 use sarmg_admin_core::AdministratorService;
 use sarmg_admin_sqlite::SqliteAdministratorStore;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -270,6 +271,11 @@ pub fn router(
     let console = Router::new()
         .route("/api/v2/monitoring/hosts", get(list_hosts))
         .route("/api/v2/monitoring/hosts/{host_id}", get(host_detail))
+        .route("/api/v2/monitoring/logs/calendar", get(report_log_calendar))
+        .route(
+            "/api/v2/monitoring/hosts/{host_id}/reports",
+            get(host_reports),
+        )
         .route(
             "/api/v2/monitoring/hosts/{host_id}/history",
             get(host_history),
@@ -834,6 +840,104 @@ async fn host_detail(
     Ok(Json(HostDetailResponse { host, latest }))
 }
 
+#[derive(Serialize)]
+struct ReportLogCalendar {
+    today: String,
+}
+
+async fn report_log_calendar() -> Json<ReportLogCalendar> {
+    Json(ReportLogCalendar {
+        today: Local::now().format("%Y-%m-%d").to_string(),
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReportLogQuery {
+    date: String,
+}
+
+#[derive(Serialize)]
+struct ReportLogView {
+    report_id: String,
+    collected_at: DateTime<Utc>,
+    received_at: DateTime<Utc>,
+    collected_at_server: String,
+    received_at_server: String,
+}
+
+#[derive(Serialize)]
+struct ReportLogsResponse {
+    host_id: String,
+    date: String,
+    reports: Vec<ReportLogView>,
+}
+
+fn local_day_start(day: NaiveDate) -> Result<DateTime<Utc>> {
+    let midnight = day
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| Error::BadRequest("invalid server date".into()))?;
+    // Local midnight can be skipped or repeated at a time-zone transition.
+    for second in 0..=86_400 {
+        let Some(local) = midnight.checked_add_signed(TimeDelta::seconds(second)) else {
+            break;
+        };
+        if let Some(start) = Local.from_local_datetime(&local).earliest() {
+            return Ok(start.with_timezone(&Utc));
+        }
+    }
+    Err(Error::BadRequest(
+        "server date is outside the supported range".into(),
+    ))
+}
+
+fn server_day_bounds(value: &str) -> Result<(DateTime<Utc>, DateTime<Utc>)> {
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        .map_err(|_| Error::BadRequest("date must be YYYY-MM-DD".into()))?;
+    if date.format("%Y-%m-%d").to_string() != value {
+        return Err(Error::BadRequest("date must be YYYY-MM-DD".into()));
+    }
+    let next = date
+        .succ_opt()
+        .ok_or_else(|| Error::BadRequest("invalid server date".into()))?;
+    Ok((local_day_start(date)?, local_day_start(next)?))
+}
+
+async fn host_reports(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<ReportLogQuery>,
+) -> Result<Json<ReportLogsResponse>> {
+    let id = canonical_uuid(&id, "host id")?;
+    let (from, to) = server_day_bounds(&query.date)?;
+    let reports = store::report_logs(&state.pool, id, from, to)
+        .await
+        .map_err(database)?
+        .ok_or_else(|| Error::NotFound("monitored host not found".into()))?
+        .into_iter()
+        .map(|row| ReportLogView {
+            report_id: row.report_id.to_string(),
+            collected_at: row.collected_at,
+            received_at: row.received_at,
+            collected_at_server: row
+                .collected_at
+                .with_timezone(&Local)
+                .format("%Y-%m-%d %H:%M:%S %:z")
+                .to_string(),
+            received_at_server: row
+                .received_at
+                .with_timezone(&Local)
+                .format("%Y-%m-%d %H:%M:%S %:z")
+                .to_string(),
+        })
+        .collect();
+    Ok(Json(ReportLogsResponse {
+        host_id: id.to_string(),
+        date: query.date,
+        reports,
+    }))
+}
+
 async fn host_history(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -1288,5 +1392,20 @@ mod tests {
         assert_eq!(envelope.message, "pairing source rate exceeded");
         assert!(envelope.retryable);
         assert_eq!(envelope.details["retry_after_seconds"], 60);
+    }
+
+    #[test]
+    fn server_calendar_boundaries_use_each_local_midnight() {
+        assert!(super::server_day_bounds("2026-02-30").is_err());
+        assert!(super::server_day_bounds("2026-2-03").is_err());
+        let (spring_start, spring_end) = super::server_day_bounds("2026-03-08").unwrap();
+        let (fall_start, fall_end) = super::server_day_bounds("2026-11-01").unwrap();
+        if std::env::var("TZ").as_deref() == Ok("America/New_York") {
+            assert_eq!((spring_end - spring_start).num_hours(), 23);
+            assert_eq!((fall_end - fall_start).num_hours(), 25);
+        } else {
+            assert!(spring_end > spring_start);
+            assert!(fall_end > fall_start);
+        }
     }
 }

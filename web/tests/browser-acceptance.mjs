@@ -75,6 +75,7 @@ try {
         if (isHosts) requested.push(url.search);
         const detailMatch = /\/monitoring\/hosts\/([0-9a-f-]+)$/.exec(url.pathname);
         const historyMatch = /\/monitoring\/hosts\/([0-9a-f-]+)\/history$/.exec(url.pathname);
+        const reportsMatch = /\/monitoring\/hosts\/([0-9a-f-]+)\/reports$/.exec(url.pathname);
         let body;
         if (isHosts) {
           const hosts = Array.from({ length: 51 }, (_, index) => index === 50 ? selectedHost() : host(index)).filter(value => !deleted || value.id !== selectedHost().id);
@@ -87,6 +88,17 @@ try {
           assert.deepEqual(request.postDataJSON(), { display_name: "Renamed Host" });
           renamed = "Renamed Host";
           return route.fulfill({ status: 204 });
+        } else if (url.pathname.endsWith("/monitoring/logs/calendar")) {
+          body = { today: "2032-12-31" };
+        } else if (reportsMatch) {
+          const date = url.searchParams.get("date");
+          assert.ok(["2032-12-31", "2032-12-30"].includes(date));
+          body = { host_id: reportsMatch[1], date, reports: (date === "2032-12-31" ? [1, 2] : [3]).map(index => ({
+            report_id: "038f1f4b-7a5d-7b5f-8d31-" + String(index).padStart(12, "0"),
+            collected_at: `${date}T00:00:00Z`, received_at: `${date}T01:00:00Z`,
+            collected_at_server: `${date} 08:00:00 +08:00`,
+            received_at_server: `${date} 09:00:00 +08:00`,
+          })) };
         } else if (historyMatch) {
           historyRequests++;
           if (failNextHistory) {
@@ -218,6 +230,14 @@ try {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       }
       const selectedId = instance(50).request_id;
+      await page.getByRole("button", { name: "日志", exact: true }).click();
+      const logDate = page.getByLabel("日志日期（服务器时区）", { exact: true });
+      await expect(logDate).toHaveValue("2032-12-31");
+      await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(2);
+      await expect(page.getByRole("table")).toContainText("2032-12-31 09:00:00 +08:00");
+      await logDate.fill("2032-12-30");
+      await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+      await page.getByRole("button", { name: "详细信息", exact: true }).click();
       await checkWebLanguage(page, {"routes":[["instances","Instance list"],[`details/${selectedId}`,"Details"],[`logs/${selectedId}`,"Logs"]],"names":["验收主机","测试主机"]});
       const pendingName = "Draft through rebind";
       await page.getByLabel("实例名称", { exact: true }).fill(pendingName);

@@ -69,6 +69,15 @@ export type HistoryPoint = {
 
 };
 export type HistoryResponse = { host_id: string; points: HistoryPoint[] };
+export type ReportLog = {
+  report_id: string;
+  collected_at: string;
+  received_at: string;
+  collected_at_server: string;
+  received_at_server: string;
+};
+export type ReportLogsResponse = { host_id: string; date: string; reports: ReportLog[] };
+export type ReportLogCalendar = { today: string };
 export type MetricAggregate = { count: number; min: number | null; max: number | null; avg: number | null };
 export type HistoryBucket = {
   start: string; end: string; sample_count: number;
@@ -205,6 +214,25 @@ export function isHistoryResponse(value: unknown): value is HistoryResponse {
     && value.points.every(point => isRecordWithExactKeys(point, ["report_id", "collected_at", "received_at", ...metricKeys])
       && isUuid(point.report_id) && isUtcTimestamp(point.collected_at) && isUtcTimestamp(point.received_at)
       && metricKeys.every(key => isNullableFiniteNumber(point[key])));
+}
+
+export function isReportLogCalendar(value: unknown): value is ReportLogCalendar {
+  return isRecordWithExactKeys(value, ["today"])
+    && typeof value.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.today);
+}
+
+export function isReportLogsResponse(value: unknown): value is ReportLogsResponse {
+  return isRecordWithExactKeys(value, ["host_id", "date", "reports"])
+    && isUuid(value.host_id) && typeof value.date === "string"
+    && /^\d{4}-\d{2}-\d{2}$/.test(value.date) && Array.isArray(value.reports)
+    && value.reports.every(row => isRecordWithExactKeys(row, [
+      "report_id", "collected_at", "received_at", "collected_at_server", "received_at_server",
+    ]) && isUuid(row.report_id) && isUtcTimestamp(row.collected_at)
+      && isUtcTimestamp(row.received_at)
+      && typeof row.collected_at_server === "string"
+      && typeof row.received_at_server === "string"
+      && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}$/.test(row.collected_at_server)
+      && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}$/.test(row.received_at_server));
 }
 
 export function isHistorySeriesResponse(value: unknown): value is HistorySeriesResponse {
