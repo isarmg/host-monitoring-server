@@ -1,11 +1,14 @@
 import { t } from "@sarmg/admin-ui/i18n";
-import { Button, EmptyState, ErrorState, FormField, LoadingState } from "@sarmg/admin-ui";
-import { errorRequestId, InstanceNameField, useAdminApplication } from "@sarmg/admin-shell";
+import { Button, EmptyState, ErrorState, FormField, LoadingState, TextField } from "@sarmg/admin-ui";
+import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import { useEffect, useState, type FormEvent } from "react";
 import { isInstances, isNoContent, type ClientInstanceListResponse } from "./api";
 import { HostDetails } from "./HostDetails";
 
 const instancesPath = "/api/v2/monitoring/client-instances";
+const trimInstanceName = (value: string) => value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "");
+const validInstanceName = (value: string) => value.length > 0 && [...value].length <= 32
+  && !/[\u0000-\u001f\u007f-\u009f\ud800-\udfff]/u.test(value);
 const pairingLabels = {
   pending: t("待配对", "Awaiting pairing"),
   active: t("已配对", "Paired"),
@@ -55,13 +58,15 @@ function InstanceNameSettings({ requestId, name, changed }: { requestId: string;
   const [draft, setDraft] = useState(name);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<{ requestId?: string } | null>(null);
+  const normalizedName = trimInstanceName(draft);
+  const nameValid = validInstanceName(normalizedName);
   useEffect(() => { setDraft(name); setFailure(null); }, [requestId, name]);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || draft.trim() === name) return;
+    if (pending || !nameValid || normalizedName === name) return;
     setPending(true); setFailure(null);
     try {
-      await client.request(`${instancesPath}/${requestId}`, isNoContent, { method: "PATCH", body: JSON.stringify({ display_name: draft.trim() }) });
+      await client.request(`${instancesPath}/${requestId}`, isNoContent, { method: "PATCH", body: JSON.stringify({ display_name: normalizedName }) });
       notify(t("实例名称已保存", "Instance name saved"));
       changed();
     } catch (error) { setFailure({ requestId: errorRequestId(error) }); }
@@ -69,9 +74,10 @@ function InstanceNameSettings({ requestId, name, changed }: { requestId: string;
   }
   return <section className="sarmg-content-panel" aria-label={t("实例设置", "Instance settings")}><h2>{t("实例设置", "Instance settings")}</h2>
     <form onSubmit={event => void save(event)} aria-busy={pending}>
-      <FormField label={t("实例名称", "Instance name")}><InstanceNameField name="display_name" value={draft} onChange={event => setDraft(event.target.value)} required readOnly={pending} /></FormField>
+      <FormField label={t("实例名称", "Instance name")}><TextField name="display_name" value={draft} onChange={event => setDraft(event.target.value)} required readOnly={pending} /></FormField>
+      {!nameValid && <p role="alert">{t("名称须为 1–32 个字符，不能包含控制字符。", "Use 1–32 characters without control characters.")}</p>}
       {failure && <ErrorState requestId={failure.requestId}>{t("实例名称未能保存，请重试。", "The instance name could not be saved. Please retry.")}</ErrorState>}
-      <div className="sarmg-actions"><Button type="submit" disabled={pending || draft.trim() === name}>{pending ? t("正在保存…", "Saving…") : t("保存名称", "Save name")}</Button></div>
+      <div className="sarmg-actions"><Button type="submit" disabled={pending || !nameValid || normalizedName === name}>{pending ? t("正在保存…", "Saving…") : t("保存名称", "Save name")}</Button></div>
     </form>
   </section>;
 }

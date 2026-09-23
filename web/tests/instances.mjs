@@ -32,6 +32,8 @@ try {
       const context = await browser.newContext({ locale: "zh-CN",  viewport: { width: 360, height: 740 } });
       const page = await context.newPage();
       const errors = []; let invitation = null; let creates = 0; let activations = 0; let release;
+      const boundedName = `\uFEFF${"x".repeat(31)}`;
+      const expectedNames = ["未配对新名称", "\uFEFF未配对新名称\uFEFF", "未配对新名称", boundedName, "未配对新名称"];
       page.on("pageerror", error => errors.push(error.message));
       await page.route("**/api/v2/**", async route => {
         const request = route.request(); const path = new URL(request.url()).pathname;
@@ -54,8 +56,9 @@ try {
         }
         if (path.endsWith(`/client-instances/${inviteId}`)) {
           if (request.method() === "PATCH") {
-            assert.deepEqual(request.postDataJSON(), { display_name: "未配对新名称" });
-            invitation.display_name = "未配对新名称";
+            const displayName = expectedNames.shift();
+            assert.deepEqual(request.postDataJSON(), { display_name: displayName });
+            invitation.display_name = displayName;
             return route.fulfill({ status: 204 });
           }
           if (invitation.status === "cancelled") invitation = null; else invitation.status = "cancelled";
@@ -98,6 +101,23 @@ try {
       await page.getByLabel("实例名称", { exact: true }).fill("未配对新名称");
       await page.getByRole("button", { name: "保存名称", exact: true }).click();
       await expect(pairingDetails).toContainText("未配对新名称");
+      await page.getByLabel("实例名称", { exact: true }).fill("\uFEFF未配对新名称\uFEFF");
+      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await expect.poll(() => invitation.display_name).toBe("\uFEFF未配对新名称\uFEFF");
+      await expect.poll(() => pairingDetails.locator("h2").evaluate(element => element.textContent)).toBe("\uFEFF未配对新名称\uFEFF");
+      await page.getByLabel("实例名称", { exact: true }).fill("未配对新名称");
+      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await expect.poll(() => invitation.display_name).toBe("未配对新名称");
+      await expect.poll(() => pairingDetails.locator("h2").evaluate(element => element.textContent)).toBe("未配对新名称");
+      await page.getByLabel("实例名称", { exact: true }).fill(`\uFEFF${"x".repeat(32)}`);
+      await expect(page.getByRole("button", { name: "保存名称", exact: true })).toBeDisabled();
+      await expect(page.getByRole("region", { name: "实例设置" }).getByRole("alert")).toContainText("1–32 个字符");
+      await page.getByLabel("实例名称", { exact: true }).fill(boundedName);
+      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await expect.poll(() => pairingDetails.locator("h2").evaluate(element => element.textContent)).toBe(boundedName);
+      await page.getByLabel("实例名称", { exact: true }).fill("未配对新名称");
+      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await expect.poll(() => invitation.display_name).toBe("未配对新名称");
       await page.getByRole("button", { name: "实例列表", exact: true }).click();
       await expect(page.getByRole("link", { name: "选择实例 未配对新名称", exact: true })).toBeVisible();
       for (const theme of ["light", "dark"]) {
