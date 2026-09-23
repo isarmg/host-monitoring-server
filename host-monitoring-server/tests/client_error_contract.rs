@@ -329,3 +329,46 @@ async fn credential_status_requires_a_current_token_and_returns_the_bound_identi
         serde_json::from_slice(&rejected.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(envelope.code.as_str(), "unauthorized");
 }
+
+#[test]
+fn gpu_memory_summary_preserves_weighted_usage_across_the_full_u64_range() {
+    let mut report = report(Uuid::new_v4());
+    let gpu = |id: &str, used: Option<u64>, total: Option<u64>| {
+        let mut gpu: host_protocol::GpuSnapshot = serde_json::from_value(serde_json::json!({
+            "id": id, "vendor": "fixture", "name": "fixture", "source": "fixture"
+        }))
+        .unwrap();
+        gpu.memory_used_bytes = used;
+        gpu.memory_total_bytes = total;
+        gpu
+    };
+    for (gpus, expected) in [
+        (
+            vec![gpu("a", Some(1), Some(2)), gpu("b", Some(3), Some(6))],
+            Some(50.0),
+        ),
+        (
+            vec![
+                gpu("a", Some(u64::MAX / 2), Some(u64::MAX)),
+                gpu("b", Some(u64::MAX / 2), Some(u64::MAX)),
+            ],
+            Some(50.0),
+        ),
+        (
+            vec![
+                gpu("a", Some(u64::MAX), Some(u64::MAX)),
+                gpu("b", Some(0), Some(u64::MAX)),
+            ],
+            Some(50.0),
+        ),
+        (
+            vec![gpu("a", Some(1), Some(2)), gpu("b", Some(u64::MAX), None)],
+            Some(50.0),
+        ),
+        (vec![gpu("a", Some(0), Some(0))], None),
+    ] {
+        report.system.gpus = gpus;
+        let metrics = host_monitoring_server::model::validate_report(&report).unwrap();
+        assert_eq!(metrics.gpu_memory_usage_percent, expected);
+    }
+}

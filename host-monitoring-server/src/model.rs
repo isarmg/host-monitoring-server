@@ -596,8 +596,8 @@ fn metric_summary(report: &ClientReport) -> MetricSummary {
         .gpus
         .iter()
         .filter_map(|gpu| gpu.memory_used_bytes.zip(gpu.memory_total_bytes))
-        .fold((0_u64, 0_u64), |sum, value| {
-            (sum.0.saturating_add(value.0), sum.1.saturating_add(value.1))
+        .fold((0_u128, 0_u128), |sum, value| {
+            (sum.0 + u128::from(value.0), sum.1 + u128::from(value.1))
         });
     MetricSummary {
         cpu_usage_percent: Some(report.system.cpu.usage_percent),
