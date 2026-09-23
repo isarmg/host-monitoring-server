@@ -70,7 +70,7 @@ export function HostLogs({ host, refreshSignal }: { host: Host; refreshSignal: n
       <FormField label={t("日志日期（服务器时区）", "Log date (server time zone)")}>
         <TextField type="date" value={date ?? ""} disabled={date === null && calendarFailure === null}
           aria-invalid={date !== null && !validDate(date) || undefined}
-          onChange={event => setDate(event.target.value)} />
+          onChange={event => { setDate(event.target.value); setCalendarFailure(null); }} />
       </FormField>
       <div className="sarmg-actions"><Button disabled={loading || date === null || !validDate(date)}
         onClick={() => setLogRefresh(value => value + 1)}>{t("刷新日志", "Refresh logs")}</Button></div>
