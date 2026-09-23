@@ -36,7 +36,7 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 Foundation 0.9.1 / `84966364c5b4662104e05741b3045482e4fd4fc8`，八个 Web 包使用
+当前 Server Rust 固定 Foundation 0.9.2 / `0174fc1b6ffcdf876e6dc7c715f107266582410e`，八个 Web 包使用
 同版正式 Release tarball 与 SHA-512 integrity，无相邻 Foundation 路径依赖；独立 CI 已通过，
 见[消费者矩阵](https://github.com/isarmg/sarmg-foundation-server/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护。

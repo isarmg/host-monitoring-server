@@ -1,6 +1,6 @@
 # Host Monitoring Server
 
-Host Monitoring Server `0.9.31` 是集中接收和展示主机遥测的管理服务。Rust/Axum 服务端负责管理员登录、Client 实例、指标接收与聚合；内置 React Web 用于查看主机状态、历史趋势和实例配置。
+Host Monitoring Server `0.9.31` 是集中接收和展示主机遥测的管理服务。Rust/Axum 服务端负责管理员登录、Client 实例、指标接收与聚合；内置 React Web 用于查看主机状态、历史趋势、按服务器日期归档的上报日志和实例配置。
 
 正式 Server 仅支持 Linux AMD64 GNU（`x86_64-unknown-linux-gnu`）。Client 位于独立的 [host-monitoring-client](https://github.com/isarmg/host-monitoring-client) 仓库。
 
