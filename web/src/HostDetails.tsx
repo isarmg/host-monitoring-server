@@ -120,9 +120,13 @@ export function HostDetails({ hostId, refreshSignal, removed, settings }: { host
     } catch (error) { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); }
     finally { if (!controller.signal.aborted) { mutation.current = null; setPending(false); } }
   }
-  if (detail === null) return <div className="sarmg-content-stack">{failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>}{settings}</div>;
+  if (detail === null) return <div className="sarmg-content-stack"><Fragment>{failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>}</Fragment>{settings}</div>;
   const { host, latest } = detail;
-  return <div className="sarmg-content-stack">
+  const metricLagMilliseconds = latest === null ? 0 : Date.parse(host.last_seen_at) - Date.parse(latest.collected_at);
+  const metricsLagging = host.status === "online" && latest !== null
+    && metricLagMilliseconds > Math.max(60_000, latest.interval_seconds * 2_000);
+  const metricsAhead = host.status === "online" && latest !== null && metricLagMilliseconds < -60_000;
+  return <div className="sarmg-content-stack"><Fragment>
     <section className="sarmg-content-panel"><h2>{host.name}</h2><dl className="host-detail-list">
       <dt>{t("状态", "Status")}</dt><dd>{displayLabel(host.status)}</dd>
       <dt>{t("系统", "System")}</dt><dd>{host.os}{host.os_version ? ` ${host.os_version}` : ""} / {host.arch}</dd>
@@ -133,12 +137,14 @@ export function HostDetails({ hostId, refreshSignal, removed, settings }: { host
       <dt>{t("数据采集时间", "Data collected at")}</dt><dd>{formatTime(host.latest_collected_at)}</dd>
       <dt>{t("服务端最近收到", "Last received by server")}</dt><dd>{formatTime(host.last_seen_at)}</dd>
       <dt>{t("页面最近更新", "Page last updated")}</dt><dd>{updatedAt?.toLocaleString(getLocale()) ?? "—"}</dd>
-    </dl><div className="sarmg-actions"><Button aria-pressed={paused} onClick={() => setPaused(value => !value)}>{paused ? t("恢复自动更新", "Resume automatic updates") : t("暂停自动更新（2 秒）", "Pause automatic updates (2s)")}</Button></div>
+    </dl>{metricsLagging && <p role="status">{t("服务端仍在收到上报，但当前展示的指标采集时间明显较早；客户端可能正在补传或已调整时钟。", "The server is still receiving reports, but the displayed metrics were collected much earlier. The client may be replaying queued reports or may have adjusted its clock.")}</p>}
+      {metricsAhead && <p role="status">{t("指标采集时间明显晚于服务端接收时间；客户端时钟可能偏快，后续指标可能暂时不更新。", "Metric collection time is well ahead of server receipt time. The client clock may be fast, and subsequent metrics may not update until it catches up.")}</p>}
+      <div className="sarmg-actions"><Button aria-pressed={paused} onClick={() => setPaused(value => !value)}>{paused ? t("恢复自动更新", "Resume automatic updates") : t("暂停自动更新（2 秒）", "Pause automatic updates (2s)")}</Button></div>
       {failure && <ErrorState requestId={failure.requestId}>{t("自动更新暂时失败，页面保留上次成功数据。", "Automatic update failed temporarily. The last successful data is retained.")}</ErrorState>}
     </section>
     <HistoryChart response={history} hours={historyHours} loading={historyLoading} failure={historyFailure} retry={() => setHistoryGeneration(value => value + 1)} changeHours={setHistoryHours} />
     <LatestDevices report={latest} />
-    {settings}
+    </Fragment>{settings}
     <section className="sarmg-content-panel" aria-label={t("实例操作", "Instance actions")}><h2>{t("实例操作", "Instance actions")}</h2><div className="sarmg-actions"><Button disabled={pending} onClick={() => setDeleting(true)}>{t("删除实例", "Delete instance")}</Button></div></section>
     {deleting && <ConfirmDangerDialog title={t("删除监控实例", "Delete monitoring instance")} description={t("移除 {0} 的监控数据和绑定凭据。该客户端需要重新配对才能再次接入。", "Remove monitoring data and bound credentials for {0}. The client must pair again to reconnect.", [host.name])}
       pending={pending} onClose={() => { if (!mutation.current) setDeleting(false); }} onConfirm={() => void remove()} />}

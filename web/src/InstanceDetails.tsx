@@ -48,7 +48,7 @@ export function InstanceDetails({ instanceId, refreshSignal, changed, removed }:
       <dt>{t("密码", "Password")}</dt><dd><code>{instance.authorization_code}</code></dd>
       <dt>{t("配对状态", "Pairing status")}</dt><dd>{pairingLabels[instance.status]}</dd>
     </dl></section>
-    {host ? <HostDetails hostId={instance.instance_id} refreshSignal={refreshSignal} removed={removed} settings={settings} />
+    {host ? <HostDetails key={instance.instance_id} hostId={instance.instance_id} refreshSignal={refreshSignal} removed={removed} settings={settings} />
       : <><section className="sarmg-content-panel"><h2>{t("监控状态", "Monitoring status")}</h2><p>{instance.status === "pending" ? t("实例尚未配对，完成客户端配对后将显示监控详情。", "This instance is not paired yet. Monitoring details will appear after client pairing.") : t("正在等待客户端首次上报监控数据。", "Waiting for the client’s first monitoring report.")}</p></section>{settings}</>}
   </div>;
 }

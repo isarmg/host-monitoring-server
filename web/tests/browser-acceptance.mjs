@@ -36,8 +36,8 @@ function bucket(start, cpu, memory) {
     disk_read_bytes_per_second: absent, disk_written_bytes_per_second: absent,
     max_temperature_celsius: absent, gpu_utilization_percent: absent, gpu_memory_usage_percent: absent, cpu_frequency_mhz: absent, gpu_power_watts: absent, gpu_core_clock_mhz: absent, max_fan_rpm: absent, max_disk_temperature_celsius: absent, max_disk_percentage_used: absent };
 }
-function latestReport() {
-  return { schema_version: 3, report_id: "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: "2026-09-04T00:00:00Z", host: { id: host(50).id, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
+function latestReport(hostId = host(50).id, collectedAt = "2026-09-04T00:00:00Z") {
+  return { schema_version: 3, report_id: collectedAt.endsWith("00:14:00Z") ? "038f1f4b-7a5d-7b5f-8d31-000000000051" : "038f1f4b-7a5d-7b5f-8d31-000000000050", collected_at: collectedAt, host: { id: hostId, os: "linux", os_version: null, kernel_version: null, arch: "x86_64", client_version: "0.8.1" }, interval_seconds: 5,
     system: { hardware: { collected_at: "2026-09-04T00:00:00Z", cpu: {model:"Modern CPU",frequency_mhz:4200,per_core_frequency_mhz:[4200,null],load_average:[0.1,0.2,0.3]},
       networks: [{name:"eth0",ip_addresses:["192.0.2.1/24"],link_speed_mbps:2500}, {name:"aux0",ip_addresses:["198.51.100.1/24"],link_speed_mbps:1000}],
       physical_networks: [{id:"pci-0000:03:00.0",name:"Intel I225-V",interface_name:"eth0",mac_address:"02:00:00:00:00:01",link_speed_mbps:2500,source:"linux-sysfs-net-device"}],
@@ -65,6 +65,8 @@ try {
       const requested = [];
       const instanceRequested = [];
       let detailActive = 0, detailRequests = 0, maximumDetailActive = 0, historyRequests = 0, failNextHistory = false, deleted = false, renamed = null;
+      let reboundId = null, releaseReboundDetail = null, releaseFirstDetail = null, futureSample = false;
+      const selectedHost = () => reboundId ? { ...host(50), id: reboundId, name: "Rebound Host", last_seen_at: "2026-09-04T00:10:00Z" } : host(50);
       page.on("pageerror", error => errors.push(error.message));
       await page.route("**/api/v2/**", async route => {
         const request = route.request();
@@ -75,12 +77,12 @@ try {
         const historyMatch = /\/monitoring\/hosts\/([0-9a-f-]+)\/history$/.exec(url.pathname);
         let body;
         if (isHosts) {
-          const hosts = Array.from({ length: 51 }, (_, index) => host(index)).filter(value => !deleted || value.id !== host(50).id);
+          const hosts = Array.from({ length: 51 }, (_, index) => index === 50 ? selectedHost() : host(index)).filter(value => !deleted || value.id !== selectedHost().id);
           body = { hosts, statistics: { total: { total: hosts.length, online: 0 }, windows: { total: 0, online: 0 }, linux: { total: hosts.length, online: 0 }, macos: { total: 0, online: 0 } } };
         } else if (url.pathname.endsWith("/client-instances")) {
           instanceRequested.push(url.search);
           const indexes = Array.from({ length: 51 }, (_, index) => index).filter(index => !deleted || index !== 50);
-          body = { instances: indexes.map(index => ({ ...instance(index), ...(index === 50 && renamed ? { display_name: renamed } : {}) })), hosts: indexes.map(host) };
+          body = { instances: indexes.map(index => ({ ...instance(index), ...(index === 50 ? { instance_id: selectedHost().id, ...(renamed ? { display_name: renamed } : {}) } : {}) })), hosts: indexes.map(index => index === 50 ? selectedHost() : host(index)) };
         } else if (url.pathname.endsWith(`/monitoring/client-instances/${instance(50).request_id}`) && request.method() === "PATCH") {
           assert.deepEqual(request.postDataJSON(), { display_name: "Renamed Host" });
           renamed = "Renamed Host";
@@ -99,10 +101,12 @@ try {
             ] };
         } else if (detailMatch) {
           detailRequests++; detailActive++; maximumDetailActive = Math.max(maximumDetailActive, detailActive);
+          if (detailRequests === 1) await new Promise(resolve => { releaseFirstDetail = resolve; });
+          if (reboundId && detailMatch[1] === reboundId && releaseReboundDetail === null) await new Promise(resolve => { releaseReboundDetail = resolve; });
           await new Promise(resolve => setTimeout(resolve, 250));
           detailActive--;
-          body = { host: host(50), latest: latestReport() };
-        } else if (url.pathname.endsWith(`/monitoring/managed-instances/${host(50).id}`) && request.method() === "DELETE") {
+          body = { host: selectedHost(), latest: latestReport(selectedHost().id, futureSample ? "2026-09-04T00:14:00Z" : "2026-09-04T00:00:00Z") };
+        } else if (url.pathname.endsWith(`/monitoring/managed-instances/${selectedHost().id}`) && request.method() === "DELETE") {
           deleted = true;
           return route.fulfill({ status: 204 });
         } else {
@@ -146,6 +150,7 @@ try {
       assert.ok((await page.locator("#hosts > h1").boundingBox()).height <= 1);
       await page.getByRole("link", { name: "选择实例 Host-50", exact: true }).click();
       await expect.poll(() => detailActive).toBe(1);
+      await expect.poll(() => typeof releaseFirstDetail).toBe("function");
       await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
       await expect(page.getByRole("button", { name: "详细信息", exact: true })).toHaveAttribute("aria-pressed", "true");
       const pairingDetails = page.getByRole("region", { name: "配对账户信息" });
@@ -154,9 +159,11 @@ try {
       await page.getByLabel("实例名称", { exact: true }).fill("Renamed Host");
       await page.getByLabel("实例名称", { exact: true }).press("Enter");
       await expect(pairingDetails).toContainText("Renamed Host");
+      releaseFirstDetail();
+      await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
+      await expect(pairingDetails).toContainText("Renamed Host");
       assert.deepEqual([...new Set(requested)], [""]);
       assert.deepEqual([...new Set(instanceRequested)], [""]);
-      await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
       const gpuSection = page.getByRole("heading", { name: "显卡", exact: true }).locator("..");
       await expect(gpuSection.locator(".host-device-card")).toHaveCount(2);
       const vega = gpuSection.locator(".host-device-card").filter({ has: page.getByRole("heading", { name: "AMD Radeon(TM) Vega 8 Graphics", exact: true }) });
@@ -184,6 +191,8 @@ try {
       await expect(physicalNetwork).toContainText("pci-0000:03:00.0");
       await page.getByRole("heading", { name: "历史趋势", exact: true }).waitFor();
       await page.getByText("页面最近更新", { exact: true }).waitFor();
+      await expect(page.getByText("服务端仍在收到上报，但当前展示的指标采集时间明显较早；客户端可能正在补传或已调整时钟。", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("指标采集时间明显晚于服务端接收时间；客户端时钟可能偏快，后续指标可能暂时不更新。", { exact: true })).toHaveCount(0);
       await expect.poll(() => detailRequests).toBeGreaterThanOrEqual(2);
       assert.equal(maximumDetailActive, 1);
       await expect.poll(() => historyRequests).toBeGreaterThanOrEqual(1);
@@ -210,6 +219,17 @@ try {
       }
       const selectedId = instance(50).request_id;
       await checkWebLanguage(page, {"routes":[["instances","Instance list"],[`details/${selectedId}`,"Details"],[`logs/${selectedId}`,"Logs"]],"names":["验收主机","测试主机"]});
+      reboundId = "018f1f4b-7a5d-7b5f-8d31-000000000051";
+      await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
+      await expect.poll(() => typeof releaseReboundDetail).toBe("function");
+      await expect(page.getByRole("heading", { name: "Host-50", exact: true })).toHaveCount(0);
+      releaseReboundDetail();
+      await expect(page.getByRole("heading", { name: "Rebound Host", exact: true })).toBeVisible();
+      await expect(page.getByText("服务端仍在收到上报，但当前展示的指标采集时间明显较早；客户端可能正在补传或已调整时钟。", { exact: true })).toBeVisible();
+      futureSample = true;
+      await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
+      await expect(page.getByText("指标采集时间明显晚于服务端接收时间；客户端时钟可能偏快，后续指标可能暂时不更新。", { exact: true })).toBeVisible();
+      await expect(page.getByText("服务端仍在收到上报，但当前展示的指标采集时间明显较早；客户端可能正在补传或已调整时钟。", { exact: true })).toHaveCount(0);
       await page.getByRole("button", { name: "删除实例", exact: true }).click();
       await page.getByRole("dialog", { name: "删除监控实例", exact: true }).getByRole("button", { name: "确认", exact: true }).click();
       await expect.poll(() => new URL(page.url()).hash).toBe("#instances");
