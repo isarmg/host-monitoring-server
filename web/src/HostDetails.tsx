@@ -1,6 +1,6 @@
 import { displayLabel } from "./display-labels";
 import { t, getLocale } from "@sarmg/admin-ui/i18n";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, ConfirmDangerDialog, ErrorState, LoadingState } from "@sarmg/admin-ui";
 import { errorRequestId, useAdminApplication } from "@sarmg/admin-shell";
 import {
@@ -14,7 +14,7 @@ import {
 
 type Failure = { requestId?: string };
 
-export function HostDetails({ hostId, refreshSignal, removed }: { hostId: string; refreshSignal: number; removed(): void }) {
+export function HostDetails({ hostId, refreshSignal, removed, settings }: { hostId: string; refreshSignal: number; removed(): void; settings: ReactNode }) {
   const { client, notify } = useAdminApplication();
   const [detail, setDetail] = useState<HostDetailResponse | null>(null);
   const [history, setHistory] = useState<HistorySeriesResponse | null>(null);
@@ -120,7 +120,7 @@ export function HostDetails({ hostId, refreshSignal, removed }: { hostId: string
     } catch (error) { if (!controller.signal.aborted) setFailure({ requestId: errorRequestId(error) }); }
     finally { if (!controller.signal.aborted) { mutation.current = null; setPending(false); } }
   }
-  if (detail === null) return failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>;
+  if (detail === null) return <div className="sarmg-content-stack">{failure ? <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState> : <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>}{settings}</div>;
   const { host, latest } = detail;
   return <div className="sarmg-content-stack">
     <section className="sarmg-content-panel"><h2>{host.name}</h2><dl className="host-detail-list">
@@ -138,6 +138,7 @@ export function HostDetails({ hostId, refreshSignal, removed }: { hostId: string
     </section>
     <HistoryChart response={history} hours={historyHours} loading={historyLoading} failure={historyFailure} retry={() => setHistoryGeneration(value => value + 1)} changeHours={setHistoryHours} />
     <LatestDevices report={latest} />
+    {settings}
     <section className="sarmg-content-panel" aria-label={t("实例操作", "Instance actions")}><h2>{t("实例操作", "Instance actions")}</h2><div className="sarmg-actions"><Button disabled={pending} onClick={() => setDeleting(true)}>{t("删除实例", "Delete instance")}</Button></div></section>
     {deleting && <ConfirmDangerDialog title={t("删除监控实例", "Delete monitoring instance")} description={t("移除 {0} 的监控数据和绑定凭据。该客户端需要重新配对才能再次接入。", "Remove monitoring data and bound credentials for {0}. The client must pair again to reconnect.", [host.name])}
       pending={pending} onClose={() => { if (!mutation.current) setDeleting(false); }} onConfirm={() => void remove()} />}

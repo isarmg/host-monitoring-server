@@ -1,7 +1,7 @@
 {
   "manifest_format": "host-monitoring-release-v2",
   "application": "host-monitoring",
-  "version": "0.9.27",
+  "version": "0.9.28",
   "schema_application_version": "0.9.26",
   "api_prefix": "/api/v2",
   "schema_revision": 7,

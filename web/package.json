@@ -1,7 +1,7 @@
 {
   "name": "host-monitoring-web",
   "private": true,
-  "version": "0.9.27",
+  "version": "0.9.28",
   "type": "module",
   "engines": {
     "node": ">=26.7.0 <27"
