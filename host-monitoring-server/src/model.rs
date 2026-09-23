@@ -705,6 +705,18 @@ pub fn host_status(last_seen: DateTime<Utc>, interval: Option<f64>) -> String {
 }
 
 #[cfg(test)]
+mod host_status_tests {
+    use super::*;
+
+    #[test]
+    fn long_sampling_cadence_does_not_report_an_active_client_offline() {
+        let last_seen = Utc::now() - chrono::Duration::minutes(6);
+        assert_eq!(host_status(last_seen, Some(3600.0)), "online");
+        assert_eq!(host_status(last_seen, Some(0.1)), "offline");
+    }
+}
+
+#[cfg(test)]
 mod client_release_tests {
     use super::*;
     #[test]
