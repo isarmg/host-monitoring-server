@@ -39,10 +39,10 @@ SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均
 当前 Server Rust 固定 Foundation 0.9.0 / `b146afefb1e864de78d5f6ac43cab7d1a4e02fc7`，八个 Web 包使用
 同版正式 Release tarball 与 SHA-512 integrity，无相邻 Foundation 路径依赖；独立 CI 已通过，
 见[消费者矩阵](https://github.com/isarmg/sarmg-foundation-server/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
-React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护，诊断管理功能已移除。
+React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护。
 独立构建通过不等于当前主分支改动已进入产品 Release；发行仍须核对精确 tag、源码和全部门禁，不改写旧资产。
 Foundation 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
-SQLite reopen 与 Router→Client 合同测试；不保留旧版本 fallback。
+SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同。
 
 当前 React 管理台以实例列表和实例详情为主线：列表提供完整实例集合、同页监控摘要、长期授权码和
 新建实例；创建成功后窗口立即关闭。详情每两秒自动读取同一快照的完整最新报告，页面隐藏或暂停时停止轮询，
@@ -144,11 +144,9 @@ Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope �
 锁身份来自规范化后的实际数据库路径；数据库本体、锁文件及其父目录仍必须满足当前文件安全检查。不要
 用复制数据库到另一路径的方式绕开锁：那既不是一致快照，也不在当前支持范围。
 
-Foundation 0.9.0 起，Host 新建库会在同一事务中写入唯一的 `_sarmg_platform_metadata` 记录，启动和
-readiness 都要求该记录严格匹配 `server-control-plane`。历史版本曾只建表而没有写记录；这类库会被只读
-拒绝，服务不会在启动时静默补写。当前项目仍是 current-only，不能据此声称 Upgrade 已支持该历史状态；
-发布采用该合同的下一版 Host 前，必须明确选择重新建库/恢复当前状态，或另行设计并验证显式离线迁移。
-在此之前不要把当前源码直接覆盖部署到持有该历史状态的实例。
+Host 新建库在初始化事务中写入唯一的 `_sarmg_platform_metadata` 记录。启动和 readiness
+要求该记录严格匹配 `server-control-plane`；缺失或不匹配时只读拒绝，服务不补写或修复。
+数据库还须满足产品 Schema identity 与 DDL 指纹检查。部署前应通过 `doctor` 验证这些条件。
 
 ## 4. Server 日常命令
 
@@ -167,88 +165,32 @@ Argon2id hash；Foundation SQLite 更新事务同时提升 `session_version` 并
 两条管理员维护命令要求 maintenance 排他锁，因此应先停止运行实例。
 
 reset CLI 不从 argv 读取密码。不要把真实密码字面量写进可持久 Shell history、脚本、工单或日志。首次创建
-完成后从长期环境文件移除 bootstrap 明文密码。管理 Web 只允许一个管理员，不提供创建管理员入口。账号名称与密码通过右上角人物图标修改；历史管理员记录不代表当前允许多个管理员。
+完成后从长期环境文件移除 bootstrap 明文密码。管理 Web 只允许一个管理员，不提供创建管理员入口。账号名称与密码通过右上角人物图标修改。
 
 ## 5. Client 配置与诊断
 
-`config/host-monitor.json.example` 是当前完整字段样例；Client 配置的 `application_version` 必须等于冻结格式 `0.9.4`，与 Server 程序版本独立。默认采集
-10 秒、慢速采集 30 秒、请求超时 10 秒、jitter 10%、spool 64 MiB。配对端点只接受 HTTPS；仅 debug
-构建另允许 loopback HTTP，release 拒绝。远程明文 HTTP 已删除；正式投递固定使用 HTTPS。自定义 CA 和客户端身份仍会执行正常证书、
-主机名与有效期验证。
-
-Spool 使用 Foundation 唯一当前二进制容器，不读取旧队列格式。单条 Host payload 上限 512 KiB，
-队列上限 4096 条，`spool_max_bytes` 必须在 1–256 MiB；物理容器元数据和隔离记录均计入容量。
-采样和网络重试 jitter 由 Foundation 实现，网络最终延迟不超过 5 分钟。
-`status` 和只读 `doctor` 使用有界目录清单，不创建队列、不获取写锁、不清理临时文件、不删除隔离记录。
-清单不是 payload 校验和检查；运行中写入引起的临时检查错误可重试，隔离记录会明确报告为异常。
-
-```bash
-host-monitor probe --config /etc/host-monitor/config.json
-host-monitor status --config /etc/host-monitor/config.json --output json
-host-monitor doctor --config /etc/host-monitor/config.json
-host-monitor doctor --config /etc/host-monitor/config.json --delivery
-```
-
-本地 doctor 与 delivery doctor 含义不同；后者会真实发送报告，应在变更窗口使用。
+Client 配置、命令、网络行为和 Foundation 依赖由独立 Client 仓库维护，见
+[配置与诊断](https://github.com/isarmg/host-monitoring-client/blob/main/docs/configuration.md)。
+Client 的产品 transport 使用 reqwest；HTTPS、响应读取和协议分类规则以该仓库的实现和测试为准。
+只读诊断与实际投递检查是不同操作，执行命令前按所安装 Client 的版本文档确认其副作用。
 
 ## 6. Linux Client
 
-以下 Client 操作必须在独立的 `host-monitoring-client` 仓库执行：
-
-```bash
-cargo build --release -p host-monitor
-NFPM_ARCH=amd64 packaging/linux/build-packages.sh
-```
-
-包安装 `/usr/bin/host-monitor`、0600 配置、systemd unit 和显式 purge 工具。普通卸载保留身份与 spool；
-确认不再需要当前状态后才运行 `host-monitor-purge`。Linux collector 会有界读取 hwmon 与 DRM sysfs，
-分别表达 AMD/Intel/NVIDIA capability；字段或驱动不存在时保留缺失/错误分类，不用 0 伪装。NVIDIA
-NVML 采集通常需要按包内 `host-monitor-gpu.conf` 明确配置设备访问，不能默认放宽整个服务沙箱。
+Linux Client 的 deb/rpm、systemd、专用账户、配置权限和卸载流程见
+[平台安装](https://github.com/isarmg/host-monitoring-client/blob/main/docs/platform-setup.md)。
+构建与安装命令在 Client 仓库执行。
 
 ## 7. Windows Client
 
-WiX 4 MSI 安装 Windows Service、交互式 `host-monitor` CLI 和 maintenance helper。Service 是持续采集
-主体；管理员在终端使用 CLI 完成配置与配对，并通过受保护本机通道读取运行状态。构建/验收使用：
-
-```powershell
-packaging\windows\wix\build-msi.cmd 0.9.26 `
-  target\x86_64-pc-windows-msvc\release\host-monitor.exe `
-  target\x86_64-pc-windows-msvc\release\host-monitor-maintenance.exe
-powershell -File packaging\windows\tests\Test-WixAuthoring.ps1
-powershell -File packaging\windows\tests\Test-PeSubsystems.ps1
-```
-
-当前 MSI 不声明跨版本 UpgradeCode 家族，也不迁移非当前状态。每个发行版本按全新产品安装；需要数据
-转换时，必须先在外部仓库建立、评审并验证明确转换边。安装失败必须由 MSI rollback 清理本次创建的
-服务和文件。
+Windows Client 的 MSI、交互 CLI、Windows Service 和权限提升流程由 Client 维护，见
+[平台安装](https://github.com/isarmg/host-monitoring-client/blob/main/docs/platform-setup.md)。
+Client 与 Server 版本独立，不使用 Server 版本号代替 MSI 的发行版本。
 
 ## 8. macOS Client
 
-`build-pkg.sh` 生成含 LaunchDaemon、配置、日志轮转和专用不可登录账户的 pkg。验证：
-
-```bash
-packaging/macos/tests/validate-packaging.sh
-packaging/macos/tests/smoke-pkg.sh
-packaging/macos/tests/account-safety-test.sh
-packaging/macos/tests/postinstall-failure-test.sh
-packaging/macos/tests/uninstall-proof-test.sh
-```
-
-卸载脚本只删除能证明属于当前包的资源；不能用宽泛递归路径替代这些身份检查。
-
-### 8.1 安装包签名边界
-
-“能生成包”与“可作为受信正式制品分发”是两项不同能力。当前仓库的 Linux nFPM 和 Windows WiX 构建
-流程没有 GPG/Authenticode 签名步骤；相关测试证明结构、权限、PE subsystem 和生命周期，不证明发布者
-身份。macOS `build-pkg.sh` 有两种明确模式：
-
-- 设置完整 `Developer ID Installer: ...` identity 时，脚本要求输入 Mach-O 已由 Developer ID
-  Application 签名，再签 pkg 并用 `pkgutil --check-signature` 验证；
-- 未设置 installer identity 时只生成明确标记的 unsigned prerelease；
-- 无论哪种模式，脚本都不执行 Apple notarization 或 stapling。
-
-因此正式分发若要求平台信任链，发布流水线还必须补齐仓库当前没有的 Linux/Windows 签名，以及 macOS
-notarization/stapling，并保存签名者、时间戳、摘要和验证结果；不能把打包测试通过写成“已签名发布”。
+macOS Client 的 pkg、LaunchDaemon、日志、账户与卸载流程见
+[平台安装](https://github.com/isarmg/host-monitoring-client/blob/main/docs/platform-setup.md)。
+原生包签名与平台验收证据随对应 Client 发行物记录。
 
 ## 9. 数据库身份与当前不支持的数据操作
 
@@ -278,80 +220,9 @@ pending/旧 denied 的有界清理和删除 Host 时的定向清理。长期实�
 
 ## 10. 监控与故障处理
 
-Run、Once 和 `doctor --delivery` 在加载身份或初始化采样器前获取 Foundation 运行会话锁。
-同一状态目录已有投递进程时，新进程直接失败；Spool 及其克隆保留该锁直到退出。
-Status、只读 Doctor、Probe 与 Pair 不获取投递会话锁，可以与运行服务并行；配对写入仍须
-自己的短事务锁。不要删除 `client.instance.lock` 或 Spool 锁文件来强行启动第二个进程，
-锁文件在进程结束后保留是正常行为；应先正常停止原实例。
-
-Unix Client 状态目录必须由当前服务账户拥有、权限为 0700，路径及祖先不能是符号链接。
-配对事务锁必须为同 UID/GID 的 0600 普通单链接文件。管理员以 root 配对时，新凭据和锁
-继承服务状态目录的 UID/GID；程序拒绝不安全的现有目录或锁，不自动 chmod/chown 修复。
-安装器/systemd 负责建立当前部署权限；权限异常时先停止并检查部署及现场，不把重新配对
-当作修复权限或覆盖异常文件的手段。配置文件仍保留安装器定义的服务可读权限（如 0640）。
-Unix 配置目录只接受 0700/0750/0755，配置文件只接受普通单链接的 0600/0640；读写使用
-Foundation 持有目录句柄，拒绝符号链接和硬链接。替换保留原 UID/GID/mode；新文件默认
-0600，不会创建缺失的父目录。配置大小上限为 64 KiB（含末尾换行），`status` 只报告配置
-错误而不修复文件。安装器负责建立供服务读取的组与权限，不通过放开 world-read 绕过检查。
-身份、令牌、配对 journal、授权状态与 active binding 的读取也检查普通单链接文件、0600 和
-所属 UID/GID；读取失败不会被当作未配对或触发权限修复。文件读取上限分别为 128 字节、
-4 KiB、64 KiB、16 KiB、16 KiB，包含文件中的空白。只读诊断沿用这些边界，不创建锁或状态。
-
-配对 journal 中的 bearer/polling 秘密在内存中使用共享清零秘密类型，克隆状态共享所有权。
-私有 journal 仍按当前协议保存明文，必须保护整个状态目录，不能上传到公开日志或 issue。
-序列化直接进入 64 KiB 有界清零缓冲区，超限保留原文件；损坏 journal 的错误不回显原值。
-轮询 Authorization 头标记为敏感。此边界不等于磁盘加密，也不保证 serde/HTTP 内部副本全部
-清零。配置中的 OTLP Token/TLS 身份密码也使用共享秘密类型，克隆配置与 Reporter 不复制
-Token 明文；保存直接进入有界清零缓冲区（含换行），超限保留原文件。配置仍是受权限保护
-的明文 JSON，不是加密存储；进程环境、解析器内部副本和 TLS 身份文件读取器不在完整清零
-保证内。损坏配置只报告错误位置、不回显输入值。凭据加载、轮换/恢复及失效已接入共享事务接口，
-Reporter 自带凭据代际；新配对 Pending 期间仍按 active binding 核对旧响应，不因 journal
-不再是 Active 而放过代际检查。无效轮换身份先于 token 写入拒绝，未知授权状态直接报错，
-不自动覆盖修复。当前配对 wire 保持不变，不保留无条件授权/失效的生产接口。
-
-服务使用同一事务中捕获的 Reporter、Host 身份和报告端点完整快照，构造失败不部分修改
-运行配置。若服务错过 B 的 Active、下一轮 C 已进入 Pending，会先加载仍有效的本地 B
-凭据，再继续 C 的轮询，不被 C 的网络等待阻塞；旧状态响应不作为回退快照的依据。
-切换同时通知采样器更新 Host 身份，并停止持有旧 Reporter 的可选 OTLP 工作线程。
-OTLP 始终为主报告持久确认后的尽力导出，旧工作线程取消时不承诺补发其队列。
-
-Host/OTLP 失败诊断不记录远端正文或 ErrorEnvelope 的任意 message/request_id，防止
-凭据被响应反射进日志；保留 HTTP 状态与本地已识别的固定机器码标签。确认正文解析错误
-只保留位置，身份不匹配不回显远端 ID；传输/读取错误移除 reqwest 附带的 URL。
-
-TLS identity/CA 每个文件上限 1 MiB，空文件拒绝。Unix 使用 Foundation 的受保护输入
-目录句柄与单文件名，拒绝符号链接、硬链接、特殊文件、不可信属主和 group/other 写权限。
-身份文件可用 0400/0440/0600/0640（允许配置的服务组读取）；CA 还允许 0444/0644。
-不要把系统证书符号链接直接作为配置输入；提供受保护的普通文件。CA 文件须解析出至少
-一张证书，未知文本不能静默当作空 CA 集合。Windows 当前只保证读取预算，原生句柄/ACL
-及 PKCS#12 验收仍未完成。Linux 测试需 OpenSSL CLI 和带 TLS 1.3 支持的 Python `ssl`；
-证书/私钥在临时私有目录生成，不提交私钥。除输入构造检查，还用独立 OpenSSL 回环服务
-验证实际 Reporter 的 TLS 1.2/1.3 投递、Authorization 和匹配 ACK；两种协议都覆盖未知
-CA、主机名不匹配、过期服务端证书、缺失/不受信任的客户端证书，失败不被分类为报告永久
-拒绝。可选 OTLP 另验证 TLS 1.3 mTLS、Bearer 与 gzip 请求，以及缺失客户端证书的拒绝。
-测试进程有握手/读取/退出期限，并由父测试负责终止和回收。这是 Linux 本机真实握手证据，
-不是 Windows/macOS PKCS#12、真实 Collector、生产代理或部署环境验收。
-
-可单独运行握手回归：`cargo test --locked -p host-monitor --lib --all-features transport::tls_tests`。
-
-Report、OTLP 和创建/轮询/激活配对共用 Client Foundation HTTP 工厂，不再保留产品本地
-响应读取循环。请求总超时覆盖 DNS 到响应体读完，连接超时为总超时与 10 秒的较小值；
-每次请求最多接受 16 个解析地址，验证后绑定实际连接。响应 Header/Body 各限 64 KiB，
-拒绝超限 Content-Length 和分块响应。系统/环境代理及重定向禁用；依赖环境代理的部署
-不能绕过这一规则，需使用可直接访问的 HTTPS 端点。明文 loopback HTTP 只允许 debug
-构建，release 连 localhost 也拒绝。配对失败不再回显任意响应正文。显式
-`host-monitor doctor --network` 使用同一异步工厂，只向配置 origin 的 `GET /health/live`
-发送无凭据请求，不读取本地状态或服务身份；成功只证明当前 CLI 账户的网络与 TLS 信任上下文可达，
-不证明后台服务账户、配对身份或报告投递可用。解析和实际 HTTP 路径已纳入跨平台测试；系统 DNS
-解析本身不可强制取消，因此超时预算不能表述为所有解析器故障下严格的进程返回上限。
-
-`status` 和默认只读 `doctor` 的 `tls` 检查复用实际投递客户端构造：检查平台身份格式、
-密码配置、受保护的有界文件读取和证书解析，不读取投递凭据、不获取事务/投递锁、不创建
-状态目录，也不做 DNS、连接或握手。失败返回固定 `tls_configuration_invalid`，不会附带
-底层解析错误链、证书内容或密码；Status 总体变为 `degraded`，Doctor 为 `unhealthy` 并
-返回失败退出码。`ok` 仅说明本地输入和构造通过，不证明证书在远端有效、服务可达或 mTLS
-授权成功。只读凭据检查使用同一 StateReader 的 4 KiB 上限与文件安全规则，拒绝特殊文件，
-不会因 FIFO 等待写入者；检查可读且非空不等于当前凭据已获 Server 授权。
+Client 本机状态、权限、凭据事务、TLS 材料、会话锁与采集诊断见
+[Client 配置与诊断](https://github.com/isarmg/host-monitoring-client/blob/main/docs/configuration.md)。
+Server 运维先区分摄取身份错误、资源饱和、数据库健康及 Client 采集/传输故障。
 
 1. 检查 Server 的 systemd，以及 Client 所在平台的 systemd/Windows Service/LaunchDaemon 状态和最近日志。
 2. Server 检查 `/healthz`、`/readyz`；writer 停止时 readiness 必须失败。

@@ -17,4 +17,4 @@ admin-only username 合同；`host-monitor` Client 继续拥有 Linux/Windows/ma
 | 完整功能与取舍 | [feature-inventory-and-tradeoffs.md](feature-inventory-and-tradeoffs.md) | Server、Client、平台能力以及明确边界 |
 | 必要 README | [../README.md](../README.md) | 项目定位、仓库入口和最短质量门 |
 | Server 发行包部署手册 | [server-release-readme.md](server-release-readme.md) | 正式归档的校验、全新安装、配置、启动、监控与故障处理 |
-| 运维 | [operations.md](operations.md) | 服务端部署、Client 安装、配置、诊断、安全和卸载 |
+| 运维 | [operations.md](operations.md) | 服务端部署、配置、诊断、安全与独立 Client 文档入口 |
