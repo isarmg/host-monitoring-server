@@ -225,7 +225,7 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
       { title: t("网络硬件", "Network hardware"), records: hardware.networks, empty: t("未发现网卡", "No network adapters") },
     ] : []),
     { title: t("网络接口", "Network interfaces"), records: report.system.networks, empty: t("未发现网络接口", "No network interfaces reported") },
-    { title: t("磁盘", "Disks"), records: report.system.disks, empty: t("未发现磁盘", "No disks reported") },
+    { title: t("磁盘", "Disks"), records: report.system.disks.map(diskDisplayRecord), empty: t("未发现磁盘", "No disks reported") },
     { title: t("温度传感器", "Temperature sensors"), records: report.system.temperatures, empty: t("未发现温度传感器", "No temperature sensors reported") },
     { title: t("显卡", "GPUs"), records: report.system.gpus, empty: t("未发现显卡", "No GPUs reported") },
   ];
@@ -235,6 +235,22 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
     {groups.map(group => <section className="sarmg-content-panel" key={group.title}><h3>{group.title}</h3>{group.records.length ? <div className="host-device-grid">{group.records.map((record, index) => <SnapshotCard key={`${group.title}-${index}`} title={record.name ?? record.label ?? record.id ?? `${group.title} ${index + 1}`} record={record} />)}</div> : <p>{group.empty}</p>}</section>)}
     <section className="sarmg-content-panel"><h3>{t("采集能力与诊断", "Collection capabilities and diagnostics")}</h3><div className="host-device-grid">{report.capabilities.map(capability => <article className="host-device-card" key={capability.name}><h4>{displayLabel(capability.name)}</h4><dl className="host-device-details"><dt>{t("状态", "Status")}</dt><dd>{capability.available ? t("可用", "Available") : t("不可用", "Unavailable")}</dd><dt>{t("来源", "Source")}</dt><dd>{capability.source}</dd>{capability.error_kind && <><dt>{t("原因", "Reason")}</dt><dd>{displayLabel(capability.error_kind)}</dd></>}{capability.message && <><dt>{t("说明", "Details")}</dt><dd>{capability.message}</dd></>}</dl></article>)}</div></section>
   </section>;
+}
+
+function diskDisplayRecord(record: Record<string, unknown>): Record<string, unknown> {
+  const total = record.total_bytes;
+  const available = record.available_bytes;
+  if (typeof total !== "number" || !Number.isFinite(total) || total <= 0
+    || typeof available !== "number" || !Number.isFinite(available)
+    || available < 0 || available > total) {
+    return record;
+  }
+  const used = total - available;
+  return {
+    ...record,
+    used_bytes: used,
+    usage_percent: used * 100 / total,
+  };
 }
 
 function SnapshotCard({ title, record }: { title: unknown; record: Record<string, unknown> }) {
