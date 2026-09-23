@@ -218,13 +218,14 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
 function LatestDevices({ report }: { report: ClientReport | null }) {
   if (report === null) return <section className="sarmg-content-panel"><h2>{t("最新设备信息", "Latest device information")}</h2><p>{t("等待首次上报", "Waiting for the first report")}</p></section>;
   const hardware = report.system.hardware;
+  const { interfaces, unmatchedHardware } = networkDisplayRecords(report.system.networks, hardware?.networks ?? []);
   const groups: Array<{ title: string; records: Record<string, unknown>[]; empty: string }> = [
     ...(hardware ? [
       { title: t("硬件传感器", "Hardware sensors"), records: hardware.sensors.map(sensor => ({ id: sensor.id, label: sensor.label, [String(sensor.kind)]: sensor.value, source: sensor.source })), empty: t("未发现可读硬件传感器", "No readable hardware sensors") },
       { title: t("磁盘健康", "Disk health"), records: hardware.disk_health, empty: t("暂无 SMART 数据，请查看采集诊断", "No SMART data yet; see collection diagnostics") },
-      { title: t("网络硬件", "Network hardware"), records: hardware.networks, empty: t("未发现网卡", "No network adapters") },
+      ...(unmatchedHardware.length ? [{ title: t("网络硬件", "Network hardware"), records: unmatchedHardware, empty: t("未发现网卡", "No network adapters") }] : []),
     ] : []),
-    { title: t("网络接口", "Network interfaces"), records: report.system.networks, empty: t("未发现网络接口", "No network interfaces reported") },
+    { title: t("网络接口", "Network interfaces"), records: interfaces, empty: t("未发现网络接口", "No network interfaces reported") },
     { title: t("磁盘", "Disks"), records: report.system.disks.map(diskDisplayRecord), empty: t("未发现磁盘", "No disks reported") },
     { title: t("温度传感器", "Temperature sensors"), records: report.system.temperatures, empty: t("未发现温度传感器", "No temperature sensors reported") },
     { title: t("显卡", "GPUs"), records: gpuDisplayRecords(report.system.gpus), empty: t("未发现显卡", "No GPUs reported") },
@@ -235,6 +236,23 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
     {groups.map(group => <section className="sarmg-content-panel" key={group.title}><h3>{group.title}</h3>{group.records.length ? <div className="host-device-grid">{group.records.map((record, index) => <SnapshotCard key={`${group.title}-${index}`} title={record.name ?? record.label ?? record.id ?? `${group.title} ${index + 1}`} record={record} />)}</div> : <p>{group.empty}</p>}</section>)}
     <section className="sarmg-content-panel"><h3>{t("采集能力与诊断", "Collection capabilities and diagnostics")}</h3><div className="host-device-grid">{report.capabilities.map(capability => <article className="host-device-card" key={capability.name}><h4>{displayLabel(capability.name)}</h4><dl className="host-device-details"><dt>{t("状态", "Status")}</dt><dd>{capability.available ? t("可用", "Available") : t("不可用", "Unavailable")}</dd><dt>{t("来源", "Source")}</dt><dd>{capability.source}</dd>{capability.error_kind && <><dt>{t("原因", "Reason")}</dt><dd>{displayLabel(capability.error_kind)}</dd></>}{capability.message && <><dt>{t("说明", "Details")}</dt><dd>{capability.message}</dd></>}</dl></article>)}</div></section>
   </section>;
+}
+
+function networkDisplayRecords(interfaces: Record<string, unknown>[], hardware: Record<string, unknown>[]) {
+  const interfaceCounts = new Map<string, number>();
+  const hardwareCounts = new Map<string, number>();
+  for (const record of interfaces) if (typeof record.name === "string") interfaceCounts.set(record.name, (interfaceCounts.get(record.name) ?? 0) + 1);
+  for (const record of hardware) if (typeof record.name === "string") hardwareCounts.set(record.name, (hardwareCounts.get(record.name) ?? 0) + 1);
+  const uniqueHardware = new Map(hardware.filter(record => typeof record.name === "string" && hardwareCounts.get(record.name) === 1).map(record => [record.name, record]));
+  const merged = new Set<string>();
+  const display = interfaces.map(record => {
+    if (typeof record.name !== "string" || interfaceCounts.get(record.name) !== 1) return record;
+    const extra = uniqueHardware.get(record.name);
+    if (!extra) return record;
+    merged.add(record.name);
+    return { ...record, ...extra };
+  });
+  return { interfaces: display, unmatchedHardware: hardware.filter(record => typeof record.name !== "string" || !merged.has(record.name)) };
 }
 
 function gpuDisplayRecords(gpus: Record<string, unknown>[]): Record<string, unknown>[] {
