@@ -45,7 +45,10 @@ function latestReport() {
       networks: [{ name: "eth0", received_bytes_total: 1024, transmitted_bytes_total: 2048, received_bytes_per_second: 128, transmitted_bytes_per_second: 256, packets_received_total: 10, packets_transmitted_total: 20, receive_errors_total: 0, transmit_errors_total: 0 }],
       disks: [{ name: "nvme0n1", mount_point: "/", file_system: "ext4", total_bytes: 1000000000, available_bytes: 500000000, read_bytes_total: 4096, written_bytes_total: 8192, read_bytes_per_second: 512, written_bytes_per_second: 1024, is_read_only: false }],
       temperatures: [{ id: "cpu", label: "CPU Package", celsius: 48.5, max_celsius: 90, critical_celsius: 100, source: "sysfs" }],
-      gpus: [{ id: "gpu0", vendor: "NVIDIA", name: "RTX", utilization_percent: 35, memory_total_bytes: 8589934592, memory_used_bytes: 4294967296, temperature_celsius: 55, power_watts: 120, core_clock_mhz: 1500, memory_clock_mhz: 7000, pcie_rx_bytes_per_second: 256, pcie_tx_bytes_per_second: 128, source: "nvml" }] },
+      gpus: [{ id: "gpu0", vendor: "NVIDIA", name: "RTX", utilization_percent: 35, memory_total_bytes: 8589934592, memory_used_bytes: 4294967296, temperature_celsius: 55, power_watts: 120, core_clock_mhz: 1500, memory_clock_mhz: 7000, pcie_rx_bytes_per_second: 256, pcie_tx_bytes_per_second: 128, source: "nvml" },
+      { id: "luid_00000000_0000a1bb", vendor: "amd", name: "AMD Radeon(TM) Vega 8 Graphics", utilization_percent: 40.3, memory_total_bytes: 1010 * 1024 * 1024, memory_used_bytes: 650 * 1024 * 1024, temperature_celsius: null, power_watts: null, core_clock_mhz: null, memory_clock_mhz: null, pcie_rx_bytes_per_second: null, pcie_tx_bytes_per_second: null, source: "windows-dxgi-pdh" },
+      { id: "adlx_00000300", vendor: "amd", name: "AMD Radeon(TM) Vega 8 Graphics", utilization_percent: null, memory_total_bytes: null, memory_used_bytes: null, temperature_celsius: 88, power_watts: null, core_clock_mhz: null, memory_clock_mhz: null, pcie_rx_bytes_per_second: null, pcie_tx_bytes_per_second: null, source: "amd-adlx-no-luid" },
+      { id: "luid_00000000_00013789", vendor: "amd", name: "AMD Radeon(TM) Vega 8 Graphics", utilization_percent: null, memory_total_bytes: 1010 * 1024 * 1024, memory_used_bytes: null, temperature_celsius: null, power_watts: null, core_clock_mhz: null, memory_clock_mhz: null, pcie_rx_bytes_per_second: null, pcie_tx_bytes_per_second: null, source: "windows-dxgi-pdh" }] },
     capabilities: [{ name: "system.cpu", available: true, source: "sysinfo", error_kind: null, message: null }], client: { spool_pending_batches: 0, collector_errors: 0 } };
 }
 const server = await preview({ preview: { host: "127.0.0.1", port: 0, strictPort: true } });
@@ -147,11 +150,19 @@ try {
       await expect(pairingDetails).toContainText(host(50).id);
       await expect(pairingDetails).toContainText(String(50).padStart(36, "0"));
       await page.getByLabel("实例名称", { exact: true }).fill("Renamed Host");
-      await page.getByRole("button", { name: "保存名称", exact: true }).click();
+      await page.getByLabel("实例名称", { exact: true }).press("Enter");
       await expect(pairingDetails).toContainText("Renamed Host");
       assert.deepEqual([...new Set(requested)], [""]);
       assert.deepEqual([...new Set(instanceRequested)], [""]);
       await page.getByRole("heading", { name: "最新设备信息", exact: true }).waitFor();
+      const gpuSection = page.getByRole("heading", { name: "显卡", exact: true }).locator("..");
+      await expect(gpuSection.locator(".host-device-card")).toHaveCount(2);
+      const vega = gpuSection.locator(".host-device-card").filter({ has: page.getByRole("heading", { name: "AMD Radeon(TM) Vega 8 Graphics", exact: true }) });
+      await expect(vega).toContainText("40.3%");
+      await expect(vega).toContainText("650 MiB");
+      await expect(vega).toContainText("88.0 ℃");
+      await expect(vega).toContainText("luid_00000000_00013789");
+      await expect(vega).toContainText("adlx_00000300");
       await page.getByText("16.0 GiB", { exact: true }).waitFor();
       await expect(page.locator("pre")).toHaveCount(0);
       await expect(page.getByRole("heading", {name:"硬件传感器",exact:true})).toBeVisible();
@@ -182,7 +193,7 @@ try {
         assert.deepEqual(result.violations, []);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       }
-      const selectedId = host(50).id;
+      const selectedId = instance(50).request_id;
       await checkWebLanguage(page, {"routes":[["instances","Instance list"],[`details/${selectedId}`,"Details"],[`logs/${selectedId}`,"Logs"]],"names":["验收主机","测试主机"]});
       await page.getByRole("button", { name: "删除实例", exact: true }).click();
       await page.getByRole("dialog", { name: "删除监控实例", exact: true }).getByRole("button", { name: "确认", exact: true }).click();

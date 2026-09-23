@@ -227,7 +227,7 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
     { title: t("网络接口", "Network interfaces"), records: report.system.networks, empty: t("未发现网络接口", "No network interfaces reported") },
     { title: t("磁盘", "Disks"), records: report.system.disks.map(diskDisplayRecord), empty: t("未发现磁盘", "No disks reported") },
     { title: t("温度传感器", "Temperature sensors"), records: report.system.temperatures, empty: t("未发现温度传感器", "No temperature sensors reported") },
-    { title: t("显卡", "GPUs"), records: report.system.gpus, empty: t("未发现显卡", "No GPUs reported") },
+    { title: t("显卡", "GPUs"), records: gpuDisplayRecords(report.system.gpus), empty: t("未发现显卡", "No GPUs reported") },
   ];
   return <section className="sarmg-content-stack" aria-labelledby="latest-devices-heading"><div className="sarmg-content-panel"><h2 id="latest-devices-heading">{t("最新设备信息", "Latest device information")}</h2><p>{t("以下数值来自最新一份报告，采集时间：{0}", "These values come from the latest report, collected at {0}.", [formatTime(report.collected_at)])}</p></div>
     <div className="host-device-grid"><SnapshotCard title="CPU" record={{ ...report.system.cpu, ...(hardware?.cpu ?? {}) }} /><SnapshotCard title={t("内存", "RAM")} record={report.system.memory} /><SnapshotCard title={t("客户端状态", "Client health")} record={{ uptime_seconds: report.system.uptime_seconds, ...report.client }} /></div>
@@ -235,6 +235,33 @@ function LatestDevices({ report }: { report: ClientReport | null }) {
     {groups.map(group => <section className="sarmg-content-panel" key={group.title}><h3>{group.title}</h3>{group.records.length ? <div className="host-device-grid">{group.records.map((record, index) => <SnapshotCard key={`${group.title}-${index}`} title={record.name ?? record.label ?? record.id ?? `${group.title} ${index + 1}`} record={record} />)}</div> : <p>{group.empty}</p>}</section>)}
     <section className="sarmg-content-panel"><h3>{t("采集能力与诊断", "Collection capabilities and diagnostics")}</h3><div className="host-device-grid">{report.capabilities.map(capability => <article className="host-device-card" key={capability.name}><h4>{displayLabel(capability.name)}</h4><dl className="host-device-details"><dt>{t("状态", "Status")}</dt><dd>{capability.available ? t("可用", "Available") : t("不可用", "Unavailable")}</dd><dt>{t("来源", "Source")}</dt><dd>{capability.source}</dd>{capability.error_kind && <><dt>{t("原因", "Reason")}</dt><dd>{displayLabel(capability.error_kind)}</dd></>}{capability.message && <><dt>{t("说明", "Details")}</dt><dd>{capability.message}</dd></>}</dl></article>)}</div></section>
   </section>;
+}
+
+function gpuDisplayRecords(gpus: Record<string, unknown>[]): Record<string, unknown>[] {
+  const display = gpus.map(gpu => ({ ...gpu }));
+  const hidden = new Set<number>();
+  for (const [index, fallback] of gpus.entries()) {
+    if (fallback.vendor !== "amd" || fallback.source !== "amd-adlx-no-luid" || typeof fallback.name !== "string") continue;
+    if (gpus.filter(gpu => gpu.vendor === "amd" && gpu.name === fallback.name && gpu.source === "amd-adlx-no-luid").length !== 1) continue;
+    const matches = gpus.flatMap((gpu, candidate) =>
+      gpu.vendor === "amd" && gpu.name === fallback.name && gpu.source === "windows-dxgi-pdh" ? [candidate] : []);
+    if (matches.length === 0 || matches.length > 2) continue;
+    const active = matches.filter(candidate =>
+      typeof gpus[candidate].utilization_percent === "number" || typeof gpus[candidate].memory_used_bytes === "number");
+    if (active.length !== 1 || matches.some(candidate => candidate !== active[0]
+      && (typeof gpus[candidate].utilization_percent === "number" || typeof gpus[candidate].memory_used_bytes === "number"
+        || gpus[candidate].memory_total_bytes !== gpus[active[0]].memory_total_bytes))) continue;
+    // Older ADLX drivers have no LUID. Group one active DXGI reading with
+    // its static-only alias, while keeping all source IDs visible.
+    const primary = display[active[0]];
+    for (const key of ["temperature_celsius", "power_watts", "core_clock_mhz", "memory_clock_mhz"])
+      if (primary[key] == null && typeof fallback[key] === "number") primary[key] = fallback[key];
+    primary.related_ids = [...matches.filter(candidate => candidate !== active[0]).map(candidate => gpus[candidate].id), fallback.id];
+    primary.source = "windows-dxgi-pdh + amd-adlx-no-luid";
+    hidden.add(index);
+    for (const candidate of matches) if (candidate !== active[0]) hidden.add(candidate);
+  }
+  return display.filter((_, index) => !hidden.has(index));
 }
 
 function diskDisplayRecord(record: Record<string, unknown>): Record<string, unknown> {
@@ -267,7 +294,7 @@ const metricLabels: Record<string, readonly [string, string]> = {
   power_on_hours: ["通电小时", "Power-on hours"], power_cycles: ["通电次数", "Power cycles"], unsafe_shutdowns: ["非安全关机", "Unsafe shutdowns"], media_errors: ["介质错误", "Media errors"], bytes_read: ["累计读取", "Total read"], bytes_written: ["累计写入", "Total written"],
   usage_percent: ["使用率", "Usage"], logical_count: ["逻辑核心", "Logical cores"], physical_count: ["物理核心", "Physical cores"], per_core_percent: ["各核心使用率", "Per-core usage"],
   total_bytes: ["总容量", "Total"], used_bytes: ["已使用", "Used"], available_bytes: ["可用", "Available"], swap_total_bytes: ["交换空间总量", "Swap total"], swap_used_bytes: ["交换空间已用", "Swap used"],
-  name: ["名称", "Name"], id: ["标识", "ID"], vendor: ["厂商", "Vendor"], mount_point: ["挂载点", "Mount point"], file_system: ["文件系统", "File system"], is_read_only: ["只读", "Read only"],
+  name: ["名称", "Name"], id: ["标识", "ID"], related_ids: ["相关读数标识", "Related reading IDs"], vendor: ["厂商", "Vendor"], mount_point: ["挂载点", "Mount point"], file_system: ["文件系统", "File system"], is_read_only: ["只读", "Read only"],
   received_bytes_total: ["累计接收", "Total received"], transmitted_bytes_total: ["累计发送", "Total sent"], received_bytes_per_second: ["接收速率", "Receive rate"], transmitted_bytes_per_second: ["发送速率", "Send rate"], packets_received_total: ["接收数据包", "Packets received"], packets_transmitted_total: ["发送数据包", "Packets sent"], receive_errors_total: ["接收错误", "Receive errors"], transmit_errors_total: ["发送错误", "Transmit errors"],
   read_bytes_total: ["累计读取", "Total read"], written_bytes_total: ["累计写入", "Total written"], read_bytes_per_second: ["读取速率", "Read rate"], written_bytes_per_second: ["写入速率", "Write rate"],
   label: ["标签", "Label"], celsius: ["当前温度", "Temperature"], max_celsius: ["最高温度", "Maximum"], critical_celsius: ["临界温度", "Critical"], source: ["来源", "Source"], utilization_percent: ["使用率", "Usage"], memory_total_bytes: ["显存总量", "Memory total"], memory_used_bytes: ["显存已用", "Memory used"], temperature_celsius: ["温度", "Temperature"], power_watts: ["功耗", "Power"], core_clock_mhz: ["核心频率", "Core clock"], memory_clock_mhz: ["显存频率", "Memory clock"], pcie_rx_bytes_per_second: ["PCIe 接收速率", "PCIe receive rate"], pcie_tx_bytes_per_second: ["PCIe 发送速率", "PCIe transmit rate"],

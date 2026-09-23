@@ -26,4 +26,5 @@
 客户端平台支持矩阵和 smartmontools 配置见相邻客户端仓库 `docs/hardware-monitoring.md`。Windows x64 已通过只读 ADLX/IGCL 补充 AMD/Intel 的温度、功耗、频率、风扇和电压，并按 Windows LUID 与 DXGI/PDH 合并。详细驱动要求与缺失数据处理见客户端 `docs/windows-gpu-vendors.md`。使用现有 GPU、温度和硬件传感器字段，不增加任何命令下发或设备控制接口。
 
 GPU 显存使用率按所有同时提供 used/total 的 GPU 汇总：`sum(used) / sum(total) × 100`。
+旧版 Windows AMD 驱动若无法提供 ADLX LUID，且 DXGI 对同型号显卡给出一条动态读数和至多一条相同显存容量的静态读数，管理页会在单张卡片中展示互补数值及全部来源标识。此处理仅影响展示，不修改原始报告或指标汇总；不能唯一匹配的读数继续分别显示。
 聚合使用可容纳全部设备计数的整数宽度；缺少任一计数的设备不参与，合计 total 为零时返回 `null`。

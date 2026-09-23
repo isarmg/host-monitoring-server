@@ -129,6 +129,17 @@ try {
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(page.getByRole("cell", { name: "已配对", exact: true })).toBeVisible();
       assert.equal(activations, 1);
+      // Recovering an existing Host identity replaces the pending instance ID.
+      // The details route must continue to resolve the same invitation.
+      const recoveredId = "018f1f4b-7a5d-7b5f-8d31-123456789abf";
+      await page.getByRole("link", { name: "选择实例 新实例", exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`#details/${inviteId}$`));
+      invitation = { ...invitation, instance_id: recoveredId };
+      await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
+      await expect(page.getByRole("region", { name: "配对账户信息" })).toContainText(recoveredId);
+      await expect(page.getByText("所选实例已不存在，请返回实例列表。", { exact: true })).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByRole("region", { name: "配对账户信息" })).toContainText(recoveredId);
       assert.ok(!page.url().includes(code));
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.deepEqual(errors, []);

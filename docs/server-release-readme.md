@@ -1,10 +1,10 @@
-# Host Monitoring Server 0.9.28 发行包部署手册
+# Host Monitoring Server 0.9.29 发行包部署手册
 
 本文只面向已经生成的正式 Server 发行物：
 
 ```text
-host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz
-host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz.sha256
+host-monitoring-server-0.9.29-x86_64-unknown-linux-gnu.tar.gz
+host-monitoring-server-0.9.29-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 它不是源码构建指南，也不描述各平台 Client 的安装。下文所有相对路径都必须在当前发行包内存在；源码
@@ -19,7 +19,7 @@ host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz.sha256
   也不提供兼容 fallback。
 - 产品内没有升级、迁移、备份或恢复命令。未来只有 `sarmg-upgrade` 为精确输入/输出版本声明并验证
   转换边后，才存在受支持的数据操作。
-- 正式发行目录固定为 `/opt/isarmg/host-monitoring/releases/0.9.28`。禁止创建 `current`、`latest`
+- 正式发行目录固定为 `/opt/isarmg/host-monitoring/releases/0.9.29`。禁止创建 `current`、`latest`
   等可变别名。
 
 ## 2. 主机前置条件
@@ -38,10 +38,10 @@ host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz.sha256
 
 ## 3. 包布局与信任关系
 
-归档只有一个顶层目录 `0.9.28/`：
+归档只有一个顶层目录 `0.9.29/`：
 
 ```text
-0.9.28/
+0.9.29/
 ├── bin/host-monitoring-server
 ├── systemd/host-monitoring-server.service
 ├── web/
@@ -74,23 +74,23 @@ JavaScript/CSS 产物。缺失、额外、符号链接、硬链接别名、特�
 
 ```bash
 sha256sum --check --strict \
-  host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -tzf host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz
+  host-monitoring-server-0.9.29-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -tzf host-monitoring-server-0.9.29-x86_64-unknown-linux-gnu.tar.gz
 ```
 
-预安装验证必须把 `0.9.28` 解压到名为 `releases` 的真实父目录，因为这是发行 root 合同的一部分：
+预安装验证必须把 `0.9.29` 解压到名为 `releases` 的真实父目录，因为这是发行 root 合同的一部分：
 
 ```bash
 temporary_root="$(mktemp -d)"
 mkdir -m 0755 "$temporary_root/releases"
 tar --extract --gzip \
-  --file host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz \
+  --file host-monitoring-server-0.9.29-x86_64-unknown-linux-gnu.tar.gz \
   --directory "$temporary_root/releases" \
   --no-same-owner --same-permissions --delay-directory-restore
 
-"$temporary_root/releases/0.9.28/bin/host-monitoring-server" identity
-"$temporary_root/releases/0.9.28/bin/host-monitoring-server" verify-release \
-  --root "$temporary_root/releases/0.9.28"
+"$temporary_root/releases/0.9.29/bin/host-monitoring-server" identity
+"$temporary_root/releases/0.9.29/bin/host-monitoring-server" verify-release \
+  --root "$temporary_root/releases/0.9.29"
 ```
 
 `identity` 必须是单行 JSON：
@@ -99,7 +99,7 @@ tar --extract --gzip \
 |---|---|
 | `manifest_format` | `host-monitoring-release-v2` |
 | `application` | `host-monitoring` |
-| `version` | `0.9.28` |
+| `version` | `0.9.29` |
 | `schema_application_version` | `0.9.26`，仅在数据库格式迁移时改变 |
 | `api_prefix` | `/api/v2` |
 | `schema_revision` | `7` |
@@ -115,7 +115,7 @@ tar --extract --gzip \
 以下流程只适用于确认没有现有 Host Monitoring Server 的全新主机：
 
 ```bash
-sudo test ! -e /opt/isarmg/host-monitoring/releases/0.9.28
+sudo test ! -e /opt/isarmg/host-monitoring/releases/0.9.29
 sudo test ! -e /etc/systemd/system/host-monitoring-server.service
 sudo test ! -e /etc/isarmg/host-monitoring.env
 ```
@@ -129,13 +129,13 @@ sudo install -d -m 0755 -o root -g root \
   /opt/isarmg/host-monitoring/releases
 
 sudo tar --extract --gzip \
-  --file host-monitoring-server-0.9.28-x86_64-unknown-linux-gnu.tar.gz \
+  --file host-monitoring-server-0.9.29-x86_64-unknown-linux-gnu.tar.gz \
   --directory /opt/isarmg/host-monitoring/releases \
   --same-owner --same-permissions --delay-directory-restore
-sudo chown -R root:root /opt/isarmg/host-monitoring/releases/0.9.28
+sudo chown -R root:root /opt/isarmg/host-monitoring/releases/0.9.29
 
-sudo /opt/isarmg/host-monitoring/releases/0.9.28/bin/host-monitoring-server \
-  verify-release --root /opt/isarmg/host-monitoring/releases/0.9.28
+sudo /opt/isarmg/host-monitoring/releases/0.9.29/bin/host-monitoring-server \
+  verify-release --root /opt/isarmg/host-monitoring/releases/0.9.29
 ```
 
 不要给 `isarmg-host`、其他 group 或 world 发行树写权限。生产静态目录检查还会拒绝由服务账户拥有的
@@ -209,7 +209,7 @@ HOST_MONITORING_RETENTION_YIELD_MILLISECONDS=10
 ```
 
 unit 会把 `HOST_MONITORING_STATIC_DIR` 固定为
-`/opt/isarmg/host-monitoring/releases/0.9.28/web`；不得指向源码、旧 dist、软链接或在线编辑目录。
+`/opt/isarmg/host-monitoring/releases/0.9.29/web`；不得指向源码、旧 dist、软链接或在线编辑目录。
 
 ### 7.2 配置约束
 
@@ -263,7 +263,7 @@ Server 与 React 管理 Web 只保留 `admin` role；不存在 viewer、operator
 ```bash
 sudo test ! -e /etc/systemd/system/host-monitoring-server.service
 sudo install -m 0644 -o root -g root \
-  /opt/isarmg/host-monitoring/releases/0.9.28/systemd/host-monitoring-server.service \
+  /opt/isarmg/host-monitoring/releases/0.9.29/systemd/host-monitoring-server.service \
   /etc/systemd/system/host-monitoring-server.service
 sudo systemd-analyze verify /etc/systemd/system/host-monitoring-server.service
 sudo systemctl daemon-reload
@@ -274,7 +274,7 @@ unit 的关键边界包括：
 - `ConditionArchitecture=x86-64`；
 - `User=isarmg-host`、`Group=isarmg-host`、`UMask=0077`；
 - `StateDirectory=isarmg/host-monitoring/db`、`RuntimeDirectory=isarmg/host-monitoring`；
-- 固定 `serve-release --root /opt/isarmg/host-monitoring/releases/0.9.28`；
+- 固定 `serve-release --root /opt/isarmg/host-monitoring/releases/0.9.29`；
 - `ProtectSystem=strict`、`ProtectHome=true`、`NoNewPrivileges=true`、空 capability；
 - 限制 address family、namespace、proc、设备、内核接口与可执行内存。
 
@@ -297,8 +297,8 @@ curl --fail http://127.0.0.1:18105/health/ready
 再次验证运行中的物理发行：
 
 ```bash
-sudo /opt/isarmg/host-monitoring/releases/0.9.28/bin/host-monitoring-server \
-  verify-release --root /opt/isarmg/host-monitoring/releases/0.9.28
+sudo /opt/isarmg/host-monitoring/releases/0.9.29/bin/host-monitoring-server \
+  verify-release --root /opt/isarmg/host-monitoring/releases/0.9.29
 ```
 
 完成 TLS 代理后，还要从外部可信客户端验证 DNS/证书链、hashed Web assets、username 登录、Session、
@@ -408,9 +408,9 @@ Session；invite/pairing 也只有有界定向清理。不能把 raw retention �
 
 重新从可信渠道取得归档与 checksum。检查是否被代理、解压工具或人工编辑改变，不要修补 manifest。
 
-### `release root must be releases/0.9.28`
+### `release root must be releases/0.9.29`
 
-root 的直接父目录必须名为 `releases`，root 必须名为 `0.9.28`，整条路径必须规范化且不能经过 symlink。
+root 的直接父目录必须名为 `releases`，root 必须名为 `0.9.29`，整条路径必须规范化且不能经过 symlink。
 
 ### 服务启动前退出
 
@@ -447,7 +447,7 @@ TCP peer 限流。不要添加邮箱候选、旧用户名 fallback 或第二 rol
 
 - [ ] 主机是 Linux x86_64 + glibc，systemd 与基础工具齐全。
 - [ ] checksum 来源可信并通过严格校验。
-- [ ] 归档只有 `0.9.28` 顶层目录，identity 和 `verify-release` 通过。
+- [ ] 归档只有 `0.9.29` 顶层目录，identity 和 `verify-release` 通过。
 - [ ] 发行位于固定版本目录，不存在可变别名或链接父链。
 - [ ] 发行树 root 所有、只读，服务账户不能写。
 - [ ] `isarmg-host` 是独立非 root、nologin 账户，group/home 精确。
@@ -460,4 +460,4 @@ TCP peer 限流。不要添加邮箱候选、旧用户名 fallback 或第二 rol
 - [ ] 首次创建后已移除长期配置中的 bootstrap 明文密码。
 - [ ] 已明确当前不存在受支持的数据迁移、备份、恢复或跨版本回滚。
 
-全部通过后，才表示当前 `0.9.28` Server 发行具备上线条件。
+全部通过后，才表示当前 `0.9.29` Server 发行具备上线条件。
