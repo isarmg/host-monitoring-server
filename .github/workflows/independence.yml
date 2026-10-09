@@ -1,0 +1,37 @@
+name: Independence gate
+on: [push, pull_request]
+
+permissions: {}
+
+jobs:
+  independence:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Enforce workflow supply-chain policy
+        run: python3 scripts/check-workflow-supply-chain.py
+      - name: Reject cross-project coupling and container deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reject the retired gateway/repository identities, not current Foundation
+          # packages such as xcss-platform-db.
+          if git grep -n -P \
+              'UNION_|X-Union-|[Uu]nion[Cc]|PluginManifest|ProcessContext|xcss-platform-gateway|xcss_platform_gateway|github\.com/isarmg/xcss-platform(?:\.git)?' \
+              -- . ':(exclude).github/**'; then
+            exit 1
+          fi
+          while IFS= read -r -d '' tracked_path; do
+            case "${tracked_path##*/}" in
+              Dockerfile*|docker-compose*.yml|docker-compose*.yaml)
+                printf '%s\n' "$tracked_path"
+                exit 1
+                ;;
+            esac
+          done < <(git ls-files -z)

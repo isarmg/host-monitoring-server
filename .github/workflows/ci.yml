@@ -1,0 +1,124 @@
+name: xsos CI
+
+on:
+  workflow_call:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTUP_TOOLCHAIN: 1.99.0
+
+jobs:
+  rust-contracts:
+    name: Server and protocol (x86_64 GNU/Linux, Rust 1.99)
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Enforce workflow supply-chain policy
+        run: python3 scripts/check-workflow-supply-chain.py
+      - name: Validate immutable server release tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            scripts/package-server-release.py \
+            scripts/write-server-release-manifest.py \
+            scripts/test-server-release-tooling.py
+          python3 scripts/test-server-release-tooling.py
+          test "$(grep -Ec '^[[:space:]]*ExecStart[[:space:]]*=' deploy/xsos.service)" -eq 1
+          grep -Fx \
+            'ExecStart=/opt/isarmg/xsos/current/bin/xsos run --release-root /opt/isarmg/xsos/current' \
+            deploy/xsos.service
+      - name: Install exact Rust toolchain
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
+      - name: Enforce the Server target boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustc -vV | grep -Fx 'host: x86_64-unknown-linux-gnu'
+          gate_binary="${RUNNER_TEMP}/xsos-build-gate"
+          gate_stderr="${RUNNER_TEMP}/xsos-build-gate.stderr"
+          rustc scripts/server-target-gate.rs -o "$gate_binary"
+          if TARGET=x86_64-pc-windows-msvc "$gate_binary" 2>"$gate_stderr"; then
+            echo 'Server build gate accepted an unsupported target.' >&2
+            exit 1
+          fi
+          grep -F \
+            'xsos only supports the x86_64-unknown-linux-gnu compilation target' \
+            "$gate_stderr"
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Assert the authoritative in-repository protocol boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fx 'xsos-protocol = { path = "crates/protocol" }' Cargo.toml
+          grep -Fx 'xsos-protocol.workspace = true' crates/server/Cargo.toml
+          if grep -RE 'xsos-protocol[[:space:]]*=.*(git|rev|branch|tag)[[:space:]]*=' \
+              -- Cargo.toml crates/server/Cargo.toml; then
+            echo 'Host components must use the authoritative workspace protocol path.' >&2
+            exit 1
+          fi
+          cargo pkgid --locked -p xsos \
+            | grep -F '#xsos@1.0.0'
+          cargo pkgid --locked -p xsos-protocol | grep -F '#xsos-protocol@1.0.0'
+      - name: Install Node.js for embedded browser assets
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Prepare embedded browser assets
+        run: |
+          npm --prefix web ci
+          web/node_modules/.bin/xcss-build-server --config foundation-web-build.json --mode development --web-only --no-install
+      - name: Check Server and protocol
+        run: >-
+          cargo check --locked --target x86_64-unknown-linux-gnu
+          -p xsos -p xsos-protocol --all-targets
+      - name: Test Server, protocol, and manifest contracts
+        run: >-
+          cargo test --locked --target x86_64-unknown-linux-gnu
+          -p xsos -p xsos-protocol
+      - name: Clippy
+        run: >-
+          cargo clippy --locked --target x86_64-unknown-linux-gnu
+          -p xsos -p xsos-protocol --all-targets -- -D warnings
+
+  frontend-contract:
+    name: Dynamic frontend contract
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+      - name: Build standalone frontend
+        working-directory: web
+        run: npm run build
+      - name: Install browser acceptance engines
+        working-directory: web
+        run: npx playwright install --with-deps chromium firefox
+      - name: Verify current frontend business and accessibility contracts
+        working-directory: web
+        run: npm run test:browser

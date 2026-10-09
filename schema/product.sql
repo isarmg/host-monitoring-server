@@ -1,0 +1,234 @@
+CREATE TABLE monitored_hosts (
+    host_id                  TEXT PRIMARY KEY,
+    name                     TEXT NOT NULL,
+    os                       TEXT NOT NULL,
+    os_version               TEXT,
+    kernel_version           TEXT,
+    arch                     TEXT NOT NULL,
+    client_version            TEXT NOT NULL,
+    capabilities             TEXT NOT NULL DEFAULT '[]',
+    registered_at            TEXT NOT NULL,
+    last_seen_at             TEXT NOT NULL,
+    latest_report_id         TEXT,
+    latest_collected_at      TEXT,
+    latest_interval_seconds  REAL,
+    lifecycle_status         TEXT NOT NULL DEFAULT 'active',
+    revoked_at               TEXT
+);
+
+CREATE INDEX monitored_hosts_registered ON monitored_hosts(registered_at, host_id);
+CREATE INDEX monitored_hosts_last_seen ON monitored_hosts(last_seen_at DESC);
+CREATE INDEX monitored_hosts_latest_report_retention
+    ON monitored_hosts(latest_report_id)
+    WHERE latest_report_id IS NOT NULL;
+
+CREATE TABLE client_metric_reports (
+    report_id                             TEXT PRIMARY KEY,
+    host_id                               TEXT NOT NULL REFERENCES monitored_hosts(host_id) ON DELETE CASCADE,
+    schema_version                        INTEGER NOT NULL,
+    collected_at                          TEXT NOT NULL,
+    received_at                           TEXT NOT NULL,
+    interval_seconds                      REAL NOT NULL,
+    payload                               TEXT,
+    cpu_usage_percent                     REAL,
+    memory_usage_percent                  REAL,
+    network_received_bytes_per_second     REAL,
+    network_transmitted_bytes_per_second  REAL,
+    disk_read_bytes_per_second            REAL,
+    disk_written_bytes_per_second         REAL,
+    max_temperature_celsius               REAL,
+    gpu_utilization_percent               REAL,
+    gpu_memory_usage_percent              REAL,
+    cpu_frequency_mhz REAL,
+    gpu_power_watts REAL,
+    gpu_core_clock_mhz REAL,
+    max_fan_rpm REAL,
+    max_disk_temperature_celsius REAL,
+    max_disk_percentage_used REAL,
+
+    aggregated_at                         TEXT
+);
+
+CREATE INDEX client_metric_reports_host_collected
+    ON client_metric_reports(host_id, collected_at DESC, report_id DESC);
+CREATE INDEX client_metric_reports_received ON client_metric_reports(received_at);
+CREATE INDEX client_metric_reports_retention_pending
+    ON client_metric_reports(collected_at, report_id)
+    WHERE aggregated_at IS NULL;
+CREATE INDEX client_metric_reports_retention_delete
+    ON client_metric_reports(aggregated_at, report_id)
+    WHERE aggregated_at IS NOT NULL;
+
+CREATE TABLE client_credentials (
+    credential_id   TEXT PRIMARY KEY,
+    host_id         TEXT NOT NULL REFERENCES monitored_hosts(host_id) ON DELETE CASCADE,
+    token_hash      TEXT NOT NULL UNIQUE,
+    issued_at       TEXT NOT NULL,
+    last_used_at    TEXT,
+    revoked_at      TEXT
+);
+
+CREATE INDEX client_credentials_host ON client_credentials(host_id);
+CREATE INDEX client_credentials_active_token
+    ON client_credentials(token_hash)
+    WHERE revoked_at IS NULL;
+
+CREATE TABLE client_instance_invites (
+    invite_id             TEXT PRIMARY KEY,
+    instance_id           TEXT NOT NULL,
+    activation_code_hash  TEXT NOT NULL UNIQUE,
+    authorization_code_enc BLOB NOT NULL CHECK(length(authorization_code_enc) BETWEEN 64 AND 1024),
+    display_name          TEXT NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'pending',
+    created_at            TEXT NOT NULL,
+    activated_at          TEXT,
+    cancelled_at          TEXT
+);
+
+CREATE INDEX client_instance_invites_created
+    ON client_instance_invites(created_at DESC);
+CREATE UNIQUE INDEX client_instance_invites_one_pending
+    ON client_instance_invites(instance_id)
+    WHERE status = 'pending';
+
+CREATE TABLE client_pairing_requests (
+    request_id           TEXT PRIMARY KEY,
+    requested_host_id    TEXT NOT NULL,
+    pairing_mode         TEXT NOT NULL DEFAULT 'fresh'
+                             CHECK(pairing_mode IN ('fresh', 'recover_identity')),
+    os                   TEXT NOT NULL,
+    os_version           TEXT,
+    kernel_version       TEXT,
+    arch                 TEXT NOT NULL,
+    client_version        TEXT NOT NULL,
+    token_hash           TEXT NOT NULL UNIQUE,
+    polling_secret_hash  TEXT NOT NULL UNIQUE,
+    status               TEXT NOT NULL DEFAULT 'pending',
+    invite_id            TEXT,
+    instance_id          TEXT,
+    expires_at           TEXT NOT NULL,
+    created_at           TEXT NOT NULL,
+    activated_at         TEXT
+);
+
+CREATE INDEX client_pairing_requests_expiry
+    ON client_pairing_requests(expires_at)
+    WHERE status = 'pending';
+CREATE INDEX client_pairing_requests_pending_device
+    ON client_pairing_requests(requested_host_id, expires_at)
+    WHERE status = 'pending';
+CREATE INDEX client_pairing_requests_invite
+    ON client_pairing_requests(invite_id)
+    WHERE invite_id IS NOT NULL;
+
+CREATE TABLE audit_events (
+    event_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    action        TEXT NOT NULL,
+    target        TEXT NOT NULL,
+    detail        TEXT,
+    actor         TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+
+CREATE INDEX audit_events_created ON audit_events(created_at DESC);
+
+CREATE TABLE client_metric_hourly_aggregates (
+    host_id                                       TEXT NOT NULL REFERENCES monitored_hosts(host_id) ON DELETE CASCADE,
+    bucket_start                                  TEXT NOT NULL,
+    interval_start                                TEXT NOT NULL,
+    interval_end                                  TEXT NOT NULL,
+    sample_count                                  INTEGER NOT NULL CHECK (sample_count > 0),
+
+    cpu_usage_percent_count                       INTEGER NOT NULL,
+    cpu_usage_percent_min                         REAL,
+    cpu_usage_percent_max                         REAL,
+    cpu_usage_percent_avg                         REAL,
+
+    memory_usage_percent_count                    INTEGER NOT NULL,
+    memory_usage_percent_min                      REAL,
+    memory_usage_percent_max                      REAL,
+    memory_usage_percent_avg                      REAL,
+
+    network_received_bytes_per_second_count       INTEGER NOT NULL,
+    network_received_bytes_per_second_min         REAL,
+    network_received_bytes_per_second_max         REAL,
+    network_received_bytes_per_second_avg         REAL,
+
+    network_transmitted_bytes_per_second_count    INTEGER NOT NULL,
+    network_transmitted_bytes_per_second_min      REAL,
+    network_transmitted_bytes_per_second_max      REAL,
+    network_transmitted_bytes_per_second_avg      REAL,
+
+    disk_read_bytes_per_second_count              INTEGER NOT NULL,
+    disk_read_bytes_per_second_min                REAL,
+    disk_read_bytes_per_second_max                REAL,
+    disk_read_bytes_per_second_avg                REAL,
+
+    disk_written_bytes_per_second_count           INTEGER NOT NULL,
+    disk_written_bytes_per_second_min             REAL,
+    disk_written_bytes_per_second_max             REAL,
+    disk_written_bytes_per_second_avg             REAL,
+
+    max_temperature_celsius_count                 INTEGER NOT NULL,
+    max_temperature_celsius_min                   REAL,
+    max_temperature_celsius_max                   REAL,
+    max_temperature_celsius_avg                   REAL,
+
+    gpu_utilization_percent_count                 INTEGER NOT NULL,
+    gpu_utilization_percent_min                   REAL,
+    gpu_utilization_percent_max                   REAL,
+    gpu_utilization_percent_avg                   REAL,
+
+    gpu_memory_usage_percent_count                INTEGER NOT NULL,
+    gpu_memory_usage_percent_min                  REAL,
+    gpu_memory_usage_percent_max                  REAL,
+    gpu_memory_usage_percent_avg                  REAL,
+    cpu_frequency_mhz_count INTEGER NOT NULL,
+    cpu_frequency_mhz_min REAL,
+    cpu_frequency_mhz_max REAL,
+    cpu_frequency_mhz_avg REAL,
+    gpu_power_watts_count INTEGER NOT NULL,
+    gpu_power_watts_min REAL,
+    gpu_power_watts_max REAL,
+    gpu_power_watts_avg REAL,
+    gpu_core_clock_mhz_count INTEGER NOT NULL,
+    gpu_core_clock_mhz_min REAL,
+    gpu_core_clock_mhz_max REAL,
+    gpu_core_clock_mhz_avg REAL,
+    max_fan_rpm_count INTEGER NOT NULL,
+    max_fan_rpm_min REAL,
+    max_fan_rpm_max REAL,
+    max_fan_rpm_avg REAL,
+    max_disk_temperature_celsius_count INTEGER NOT NULL,
+    max_disk_temperature_celsius_min REAL,
+    max_disk_temperature_celsius_max REAL,
+    max_disk_temperature_celsius_avg REAL,
+    max_disk_percentage_used_count INTEGER NOT NULL,
+    max_disk_percentage_used_min REAL,
+    max_disk_percentage_used_max REAL,
+    max_disk_percentage_used_avg REAL,
+
+
+    updated_at                                    TEXT NOT NULL,
+    PRIMARY KEY (host_id, bucket_start),
+    CHECK (bucket_start <= interval_start),
+    CHECK (interval_start <= interval_end),
+    CHECK (cpu_usage_percent_count BETWEEN 0 AND sample_count),
+    CHECK (memory_usage_percent_count BETWEEN 0 AND sample_count),
+    CHECK (network_received_bytes_per_second_count BETWEEN 0 AND sample_count),
+    CHECK (network_transmitted_bytes_per_second_count BETWEEN 0 AND sample_count),
+    CHECK (disk_read_bytes_per_second_count BETWEEN 0 AND sample_count),
+    CHECK (disk_written_bytes_per_second_count BETWEEN 0 AND sample_count),
+    CHECK (max_temperature_celsius_count BETWEEN 0 AND sample_count),
+    CHECK (gpu_utilization_percent_count BETWEEN 0 AND sample_count),
+    CHECK (gpu_memory_usage_percent_count BETWEEN 0 AND sample_count),
+    CHECK (cpu_frequency_mhz_count BETWEEN 0 AND sample_count),
+    CHECK (gpu_power_watts_count BETWEEN 0 AND sample_count),
+    CHECK (gpu_core_clock_mhz_count BETWEEN 0 AND sample_count),
+    CHECK (max_fan_rpm_count BETWEEN 0 AND sample_count),
+    CHECK (max_disk_temperature_celsius_count BETWEEN 0 AND sample_count),
+    CHECK (max_disk_percentage_used_count BETWEEN 0 AND sample_count)
+);
+
+CREATE INDEX client_metric_hourly_aggregates_retention
+    ON client_metric_hourly_aggregates(interval_end, host_id, bucket_start);

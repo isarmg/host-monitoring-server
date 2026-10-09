@@ -1,0 +1,61 @@
+[package]
+name = "xsos"
+description = "Independent host monitoring server backed by SQLite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+hex.workspace = true
+futures-util.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+base64.workspace = true
+chrono.workspace = true
+clap.workspace = true
+http-body-util.workspace = true
+mime.workspace = true
+rand.workspace = true
+rustix.workspace = true
+xcss-admin-auth.workspace = true
+xcss-admin-core.workspace = true
+xcss-admin-axum.workspace = true
+xcss-admin-sqlite.workspace = true
+xcss-contracts.workspace = true
+xcss-error.workspace = true
+xcss-platform-db.workspace = true
+xcss-schema-identity.workspace = true
+xcss-server-runtime.workspace = true
+xcss-web-assets.workspace = true
+xcss-server-target.workspace = true
+xcss-sqlite.workspace = true
+xcss-secret.workspace = true
+xcss-secret-envelope.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+xcss-server-cli.workspace = true
+xcss-log.workspace = true
+xcss-config.workspace = true
+xcss-state-file.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+xsos-protocol.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tower.workspace = true
+
+[build-dependencies]
+xcss-web-assets.workspace = true
+
+[lints]
+workspace = true
