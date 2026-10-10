@@ -1,56 +1,83 @@
 # xsos
 
-当前工作树为 `1.0.0` 发行候选；正式源码、标签与资产以通过 CI 的精准 Source 和 Release manifest 为准。
+xsos 是自托管的主机监控服务，与 xsoc 客户端配合，集中接收遥测并提供内置 Web 管理台。
 
-当前启动入口和初始化边界见 [服务命令](docs/cli.md)。部署须先显式 `init`，再 `run`；配置验证和状态查询失败会返回非零退出码。
+## 项目功能
 
-xsos `1.0.0` 是集中接收和展示主机遥测的管理服务。Rust/Axum 服务端负责管理员登录、Client 实例、指标接收与聚合；内置 React Web 用于查看主机状态、历史趋势、按服务器日期归档的上报日志和实例配置。
+- 查看 CPU、内存、磁盘、网络与可用硬件传感器数据
+- 查看主机状态、历史趋势和按接收日期归档的上报日志
+- 管理客户端实例、配对和授权码
 
-正式 Server 仅支持 Linux AMD64 GNU（`x86_64-unknown-linux-gnu`）。Client 位于独立的 [xsoc](https://github.com/isarmg/xsoc) 仓库。
+## 适用平台
 
-设备侧从安装、配对/重新配对到服务或后台任务管理、诊断与卸载，见独立 [Client 分平台部署指南](https://github.com/isarmg/xsoc/blob/main/docs/platform-setup.md)。
+服务端仅支持 Linux x86_64 / AMD64、glibc，生产部署使用 systemd。Web 页面通过浏览器访问，已内嵌到服务端程序中。
 
-## 配置概览
+## 快速部署
 
-生产发行树使用 `/etc/isarmg/xsos.env`。从模板创建受保护的环境文件：
+以下用于全新主机。先从 [Release](https://github.com/isarmg/xsos/releases) 下载同版 Linux 归档及 `.sha256`，在下载目录执行；遇到已有目录、账户或配置时停止，不覆盖现有安装。
 
 ```sh
-sudo install -d -m 0750 /etc/isarmg
-sudo install -m 0600 config/xsos.env.example /etc/isarmg/xsos.env
+set -eu
+sha256sum --check --strict xsos-1.0.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+sudo test ! -e /opt/isarmg/xsos
+sudo test ! -e /etc/isarmg/xsos.env
+sudo test ! -e /etc/systemd/system/xsos.service
+sudo test ! -e /var/lib/isarmg/xsos
+sudo install -d -m 0755 -o root -g root /opt/isarmg /opt/isarmg/xsos /opt/isarmg/xsos/releases
+sudo tar -xzf xsos-1.0.0-x86_64-unknown-linux-gnu.tar.gz \
+  -C /opt/isarmg/xsos/releases --same-permissions --delay-directory-restore
+sudo chown -R root:root /opt/isarmg/xsos/releases/1.0.0
+sudo /opt/isarmg/xsos/releases/1.0.0/bin/xsos \
+  verify-release --root /opt/isarmg/xsos/releases/1.0.0
+sudo groupadd --system xsos
+sudo useradd --system --gid xsos --home-dir /var/lib/isarmg/xsos \
+  --no-create-home --shell /usr/sbin/nologin xsos
+sudo install -d -m 0700 -o xsos -g xsos /var/lib/isarmg/xsos/db
+sudo install -d -m 0755 -o root -g root /etc/isarmg
+sudo sh -c 'umask 077; set -C; : > /etc/isarmg/xsos.env'
 openssl rand -base64 32
 sudoedit /etc/isarmg/xsos.env
 ```
 
-至少替换管理员密码和 `XSOC_AUTHORIZATION_KEY`，并检查数据库、静态资源与监听地址。发行包中的服务启动命令为：
+填写下列配置：将密码替换为至少 12 字节的独立强密码，密钥替换为上一步生成的 Base64 值；密钥需长期保存。
 
-```sh
-/opt/isarmg/xsos/current/bin/xsos \
-  run --release-root /opt/isarmg/xsos/current
+```dotenv
+XSOS_DATABASE_URL=sqlite:///var/lib/isarmg/xsos/db/xsos.sqlite3
+XSOS_BIND=127.0.0.1:18105
+XSOS_DEVELOPMENT=false
+XSOS_BOOTSTRAP_ADMIN_USERNAME=admin
+XSOS_BOOTSTRAP_ADMIN_PASSWORD=REPLACE_WITH_A_UNIQUE_LONG_PASSWORD
+XSOC_AUTHORIZATION_KEY=REPLACE_WITH_BASE64_ENCODED_32_RANDOM_BYTES
 ```
 
-建议只监听 loopback，由 HTTPS 反向代理对外提供 Web。完整部署、账号维护、备份和诊断见[运维文档](docs/operations.md)。
-
-## 开发验证
+先初始化，再启动服务：
 
 ```sh
-cargo +1.99.0 fmt --all -- --check
-cargo +1.99.0 clippy --locked --target x86_64-unknown-linux-gnu --all-targets -- -D warnings
-cargo +1.99.0 test --locked --target x86_64-unknown-linux-gnu
-(cd web && npm ci && npm run build)
+sudo ln -sT /opt/isarmg/xsos/releases/1.0.0 /opt/isarmg/xsos/current
+sudo systemd-run --wait --collect -p User=xsos -p Group=xsos \
+  -p EnvironmentFile=/etc/isarmg/xsos.env \
+  /opt/isarmg/xsos/releases/1.0.0/bin/xsos init
+sudo install -m 0644 -o root -g root \
+  /opt/isarmg/xsos/current/systemd/xsos.service /etc/systemd/system/xsos.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now xsos.service
+curl --fail http://127.0.0.1:18105/readyz
 ```
 
-## 文档
+就绪响应应为 `{"ready":true}`。通过 HTTPS 反向代理转发到 `127.0.0.1:18105`，使用配置的管理员账号登录；初始化成功后从环境文件移除 `XSOS_BOOTSTRAP_ADMIN_PASSWORD`。客户端须另行安装并配对。
 
-- [文档总览](docs/README.md)
-- [初学者指南](docs/beginner-guide/README.md)
-- [项目工作流程](docs/project-workflow.md)
-- [功能范围与取舍](docs/feature-inventory-and-tradeoffs.md)
-- [部署与运维](docs/operations.md)
+## 编译部署
 
-代码采用 [Apache License 2.0](LICENSE-APACHE)。
+在 Linux AMD64 GNU 主机准备 Git、Rust `1.99.0`、Node.js `26.7.0`、npm、Python `3.11+` 和 C 编译工具。从干净源码、与版本号一致且精确指向 HEAD 的 annotated tag 构建发行包；输出目录必须已存在、位于仓库外且不含同名制品：
 
-硬件监控扩展、平台支持与当前协议要求见 [硬件监控说明](docs/hardware-monitoring.md)。
+```sh
+git clone https://github.com/isarmg/xsos.git
+cd xsos
+git checkout v1.0.0
+mkdir -p "$HOME/xsos-output"
+python3 scripts/package-server-release.py "$HOME/xsos-output"
+```
 
-当前发布版本：**1.0.0**。参见 [1.0.0 发布说明](docs/releases/1.0.0.md)。
+脚本构建 Web 和 Rust、生成校验信息并验证发行包。将输出的归档和 `.sha256` 复制到目标主机，按“快速部署”安装。
 
-公共支撑的职责、单体依赖、平台边界与验证方法见[公共支撑说明](docs/common-support.md)。
+[详细文档](docs/README.md)

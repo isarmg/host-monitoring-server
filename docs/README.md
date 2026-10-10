@@ -14,7 +14,7 @@ admin-only username 合同；`xsoc` Client 继续拥有 Linux/Windows/macOS 与�
 | 初学者学习指南 | [beginner-guide/README.md](beginner-guide/README.md) | 从组件、遥测、配对、SQLite 到平台打包的学习路径 |
 | 工作流程与流程树 | [project-workflow.md](project-workflow.md) | 启动、配对、报告、聚合、移动宿主和发行流程 |
 | 完整功能与取舍 | [feature-inventory-and-tradeoffs.md](feature-inventory-and-tradeoffs.md) | Server、Client、平台能力以及明确边界 |
-| 必要 README | [../README.md](../README.md) | 项目定位、仓库入口和最短质量门 |
+| 必要 README | [../README.md](../README.md) | 项目简介、功能、平台、快速部署和编译部署 |
 | Server 发行包部署手册 | [server-release-readme.md](server-release-readme.md) | 正式归档的校验、全新安装、配置、启动、监控与故障处理 |
 | 运维 | [operations.md](operations.md) | 服务端部署、配置、诊断、安全与独立 Client 文档入口 |
 | 当前发行说明 | [releases/1.0.0.md](releases/1.0.0.md) | 本版本功能和验证范围 |
@@ -22,3 +22,12 @@ admin-only username 合同；`xsoc` Client 继续拥有 Linux/Windows/macOS 与�
 工程约定与依赖来源见 [架构说明](architecture.md)，Rust unsafe 结论见 [审查记录](unsafe-audit.md)。
 
 公共支撑的职责、单体依赖、平台边界与验证方法见[公共支撑说明](common-support.md)。
+
+## 操作与开发入口
+
+- [服务命令](cli.md)：显式初始化、运行、配置校验和状态查询
+- [本地开发服务](local-service.md)：从源码启动管理 Web
+- [开发与验证](development.md)：工具链、质量检查和运行边界
+- [硬件监控](hardware-monitoring.md)：遥测范围、平台与协议要求
+- [实例管理](instance-management.md)：实例配置和配对
+- [客户端分平台部署](https://github.com/isarmg/xsoc/blob/main/docs/platform-setup.md)：设备安装、配对、服务、诊断与卸载
