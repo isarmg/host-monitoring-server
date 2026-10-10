@@ -44,7 +44,7 @@ function HostsPage() {
   useEffect(() => {
     if (page !== "logs" || selected === null) return;
     const controller = new AbortController();
-    setLogHost(null); setLogFailure(null);
+    setLogHost(current => current?.selection === selected ? current : null); setLogFailure(null);
     void client.request(`${CURRENT_API_PREFIX}/monitoring/client-instances?instance_id=${encodeURIComponent(selected)}`,
       (value): value is ClientInstanceListResponse => isFocusedInstance(value, selected),
       { ...LIST_REQUEST_BUDGET, signal: controller.signal })

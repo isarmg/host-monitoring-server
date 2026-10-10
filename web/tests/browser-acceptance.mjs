@@ -595,6 +595,11 @@ try {
       assert.equal(rangeQuery.get("start_date"), "2032-12-30");
       assert.equal(rangeQuery.get("end_date"), "2032-12-31");
       assert.equal(rangeQuery.has("cursor"), false);
+      const focusedRefresh = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/monitoring/client-instances") && new URL(response.url()).searchParams.has("instance_id"));
+      await page.getByRole("banner").getByRole("button", { name: "刷新", exact: true }).click();
+      await focusedRefresh;
+      await logDate.expectValue("2032-12-30", "2032-12-31");
+      await expect(page.getByRole("table")).toContainText("2032-12-30 09:00:00 +08:00");
       await page.getByRole("button", { name: "详细信息", exact: true }).click();
       await deviceNavigation.waitFor();
       await expect(deviceNavigation.getByRole("button", { name: "历史趋势" })).toHaveAttribute("aria-pressed", "true");
