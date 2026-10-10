@@ -108,12 +108,30 @@ class ReleaseToolingTests(unittest.TestCase):
         repository = SCRIPT.parent.parent
         readme = repository / PACKAGE.RELEASE_README
         text = readme.read_text(encoding="utf-8")
-        self.assertGreater(len(text.encode("utf-8")), 10_000)
+        for required in (
+            "## 安装与初始化", "## HTTPS 入口", "## 运行检查",
+            "## 安装布局", "## 遇到问题", "sha256sum --check --strict",
+            "verify-release --root", "groupadd --system xsos",
+            "EnvironmentFile=/etc/isarmg/xsos.env", "bin/xsos init",
+            "systemctl enable --now xsos.service", "/readyz", "sudoedit",
+        ):
+            self.assertIn(required, text)
+        for destination in re.findall(r"\]\(([^)]+)\)", text):
+            self.assertTrue(
+                destination.startswith(("https://", "#")),
+                f"packaged README link must work without the source tree: {destination}",
+            )
         self.assertIn("xsos 1.0.0 发行包部署手册", text)
         self.assertIn("bin/xsos", text)
         self.assertIn("systemd/xsos.service", text)
         self.assertIn("RELEASE-MANIFEST.json", text)
-        self.assertIn("| `schema_revision` | `1` |", text)
+        identity_rows = {
+            cells[0]: cells[1]
+            for line in text.splitlines()
+            if line.startswith("|")
+            and len(cells := [cell.strip().strip("`") for cell in line.strip("|").split("|")]) == 2
+        }
+        self.assertEqual(identity_rows.get("schema_revision"), "1")
         self.assertIn(
             "XSOC_AUTHORIZATION_KEY=REPLACE_WITH_BASE64_ENCODED_32_RANDOM_BYTES",
             text,

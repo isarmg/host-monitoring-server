@@ -15,7 +15,7 @@ cargo +1.99.0 test --locked --target x86_64-unknown-linux-gnu
 python3 scripts/check-workflow-supply-chain.py
 ```
 
-单独构建管理页面可执行 `npm --prefix web run build`。本地服务初始化、启动和停止见[本地开发服务](local-service.md)，生产归档与安装见[运维](operations.md)。正式打包要求干净源码和精确 annotated tag；开发构建通过不代表正式制品已通过发布验收。
+单独构建管理页面可执行 `npm --prefix web run build`。本地服务初始化、启动和停止见[本地开发服务](local-service.md)，生产归档与安装见[部署手册](server-release-readme.md)。正式打包要求干净源码和精确 annotated tag；开发构建通过不代表正式制品已通过发布验收。
 
 ## 运行边界
 
@@ -26,3 +26,18 @@ python3 scripts/check-workflow-supply-chain.py
 ## 架构与许可
 
 工程结构、依赖来源和服务端约束见[架构](architecture.md)；公共支撑的职责、单体依赖与验证见[公共支撑](common-support.md)。代码采用 [Apache License 2.0](../LICENSE-APACHE)。
+
+## Web 和打包检查
+
+```sh
+npm --prefix web run test:unit
+npm --prefix web run build
+npm --prefix web run test:browser
+python3 scripts/test-server-release-tooling.py
+```
+
+浏览器测试需要本机已安装的 Playwright Chromium/Firefox；首次准备使用 `cd web && npx playwright install --with-deps chromium firefox`。常规浏览器测试使用受控 API 数据；真实服务和 Client 联调另行记录。原生安装、硬件和真实 Sunshine 的结果按目标环境单独验证。
+
+## 编辑文档
+
+安装页围绕一条可完成的工作流，使用页解释正常结果，参考页集中字段和精确语义。命令注明执行平台、目录、权限和预期输出；风险放在相关步骤旁。参考 [GNU 用户手册组织建议](https://www.gnu.org/prep/standards/html_node/GNU-Manuals.html)和 [Linux 文档的读者分类](https://docs.kernel.org/)。改动后检查相对链接、标题锚点、示例语法及打包器实际带入的文档。

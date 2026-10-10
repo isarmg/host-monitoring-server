@@ -1,24 +1,27 @@
-# 当前服务命令
+# xsos 命令参考
 
-所有命令使用同一份当前 JSON 配置：`xsos --config /absolute/config.json --data-dir /absolute/data ...`。配置来源优先级为命令行、明确映射的环境变量、文件、默认值。未知字段、重复字段、错误类型和坏的低优先级配置都会被拒绝；诊断不会打印秘密值。`config validate --json` 中 `sources` 是字段的来源，`schema_identity` 是校验过的当前结构身份，`state_paths` 列出全部私有持久状态的绝对路径。
+在安装主机运行 `/opt/isarmg/xsos/current/bin/xsos`。下面以程序名简写；生产环境应使用[运维示例](administration.md)加载与服务相同的环境和账户。
 
-```sh
-xsos --help
-xsos --version
-xsos init --config /absolute/config.json --data-dir /absolute/data
-xsos config validate --config /absolute/config.json --data-dir /absolute/data --json
-xsos run --config /absolute/config.json --data-dir /absolute/data
-xsos status --config /absolute/config.json --data-dir /absolute/data --json
-```
+| 命令 | 用途 | 执行时机 |
+|---|---|---|
+| `--help` / `--version` | 查看命令和版本 | 随时 |
+| `identity` | 查看产品、源码、平台和结构身份 | 随时 |
+| `verify-release --root PATH` | 校验完整发行目录 | 安装后、启动问题排查时 |
+| `init` | 创建数据库和首个管理员 | 配置完成后的首次安装；私有数据目录应为空 |
+| `config validate --json` | 通过私有快照验证配置、当前数据库和凭据 | 可与服务并行 |
+| `run --release-root PATH` | 运行正式服务 | 初始化完成后，由 systemd 启动 |
+| `status --json` | 验证当前监听地址的服务身份及 ready 状态 | 运行期间 |
+| `doctor` | 深入检查数据库与业务结构 | 先停止服务 |
+| `admin-reset-password --username NAME` | 从 stdin 读取新密码并撤销账号会话 | 先停止服务 |
 
-`init` 是创建数据库和首个管理员的唯一部署入口，只接受尚未初始化的私有空目录。配置和管理员凭据必须先有效；已有数据不会被覆盖。数据目录应属于服务账号、权限为 `0700`，私有文件权限为 `0600`。正式制品的运行还需指定 `run --release-root /absolute/release`。
+## 配置选择
 
-`run` 只接受完整的当前数据；缺失数据库、管理员、结构漂移或身份不符均失败，不隐式初始化或重置账号。运行及写入维护命令使用同一个数据目录维护锁；整个运行期间持有实例锁。`.state-maintenance-pending.json` 存在时拒绝运行、初始化或写入维护；只读检查仍可运行。
+`--config /absolute/server.json` 选择 JSON 配置；`--data-dir /absolute/data` 选择私有数据目录。优先级为命令行、显式映射的环境变量、文件、默认值。文件中的未知/重复字段或错误类型会报错，即使更高优先级覆盖了该字段。
 
-`config validate` 读取私有 SQLite 验证快照，原库、WAL、SHM 和业务文件保持不变。`status` 查询当前监听地址的 `/readyz`，核对服务身份和真实业务就绪；端口占用、其他服务、连接失败或未就绪均返回非零退出码。`--json` 输出单个机器记录；失败返回稳定 `code/message/details` 错误记录。帮助和版本查询不要求初始化。
+`config validate --json` 返回 `sources`、`schema_identity` 和 `state_paths`。JSON 模式输出单个记录，失败为稳定的 `code/message/details` 并返回非零退出码。身份和帮助查询无需数据库。字段与环境变量见[配置参考](configuration.md)。
 
-共享配置、命令、快照与日志均固定到同一 xcss Git 完整提交和精确版本；Web 包使用封存制品的真实 SHA-512 完整性。当前发布状态以精准 Source 的 CI 和实际 Release manifest 为准。正式发行必须从这些精确输入独立构建并验证最终制品。
+## 文件与并发
 
-`init` 同时创建 `data_dir/logs` 私有目录；`run` 验证该目录后写入共享 JSON 日志。默认单文件上限 8 MiB、保留 4 个归档，总上限 40 MiB。配置和状态命令不打开运行日志文件。
+数据目录属于服务账户，目录权限 0700、私有文件 0600。运行持有实例锁与共享维护锁；doctor 和密码重置需要排他维护锁。维护待决标记 `.state-maintenance-pending.json` 存在时，先排查未完成维护操作。配置校验使用独立快照，保持原数据库文件不变。
 
-正式运行可使用安装目录下唯一受控的 `current` 链接：安装目录与 releases 目录必须是同一所有者的实体 `0755` 目录，链接只能指向该安装目录中当前软件版本的绝对实体路径；完整发行树验证仍然执行。
+正式启动校验只读发行树。`current` 是安装目录下指向当前版本实体目录的单跳绝对链接，安装父目录与 releases 目录使用相同所有者和 0755 权限。
