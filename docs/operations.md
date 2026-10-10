@@ -36,7 +36,7 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 xcss 1.0.0 / `9637806055b7d7a18be206f0b83e9b22b73902db`，一个 @xcss/web 包使用
+当前 Server Rust 固定 xcss 1.0.0 / `627d988a4ed471469ed4fdce8af0ea6b5c131ce6`，一个 @xcss/web 包使用
 同版 Release tarball 与准确 SHA-512 integrity，无相邻 xcss 路径依赖。本轮使用封存的本地候选 Git 对象和真实 tarball 验证；远端发布与独立 CI 仍须以当前精确提交的正式证据核对，
 见[本项目当前 CI](https://github.com/isarmg/xsos/actions)与[正式发行资产](https://github.com/isarmg/xsos/releases)。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护。
