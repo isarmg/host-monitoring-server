@@ -46,7 +46,7 @@ export async function withLocalServer({ prefix, binary, service, extraEnv = {}, 
     let ready = false;
     for (let i = 0; i < 100; i++) {
       assert.equal(child.exitCode, null, `Test service stopped; inspect ${root}`);
-      try { const response = await fetch(base + "/readyz", { signal: AbortSignal.timeout(1000) }); ready = response.ok && response.headers.get("x-xcss-service") === service && (await response.json()).ready === true; } catch { /* startup */ }
+      try { const response = await fetch(base + "/readyz", { signal: AbortSignal.timeout(1000) }); ready = response.ok && response.headers.get("x-service") === service && (await response.json()).ready === true; } catch { /* startup */ }
       if (ready) break;
       await new Promise(done => setTimeout(done, 100));
     }

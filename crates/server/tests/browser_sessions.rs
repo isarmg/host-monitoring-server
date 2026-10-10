@@ -94,7 +94,7 @@ async fn xcss_login_session_csrf_and_logout_are_used_end_to_end() {
         .to_owned();
     let body = login.into_body().collect().await.expect("body").to_bytes();
     let session: AdministratorSession = serde_json::from_slice(&body).expect("session contract");
-    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _xcss_admin_sessions")
+    let stored: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _common_admin_sessions")
         .fetch_one(&fixture.pool)
         .await
         .expect("session count");
@@ -185,7 +185,7 @@ async fn disabling_foundation_administrator_invalidates_existing_session() {
         .next()
         .expect("cookie pair")
         .to_owned();
-    sqlx::query("UPDATE _xcss_administrators SET active=0,session_version=session_version+1")
+    sqlx::query("UPDATE _common_administrators SET active=0,session_version=session_version+1")
         .execute(&fixture.pool)
         .await
         .expect("disable administrator");

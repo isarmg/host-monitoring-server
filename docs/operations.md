@@ -36,9 +36,9 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 xcss 1.0.0 / `9fb5b3f8f20762cb93050bc52ea81a36ac0dc914`，一个 @xcss/web 包使用
+当前 Server Rust 固定 xcss 1.0.0 / `9637806055b7d7a18be206f0b83e9b22b73902db`，一个 @xcss/web 包使用
 同版 Release tarball 与准确 SHA-512 integrity，无相邻 xcss 路径依赖。本轮使用封存的本地候选 Git 对象和真实 tarball 验证；远端发布与独立 CI 仍须以当前精确提交的正式证据核对，
-见[消费者矩阵](https://github.com/isarmg/xcss/blob/main/consumers/consumer-matrix.json)。xcsc 是另一个独立上游，其版本不随 Server 包改写。
+见[本项目当前 CI](https://github.com/isarmg/xsos/actions)与[正式发行资产](https://github.com/isarmg/xsos/releases)。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护。
 独立构建通过不等于当前主分支改动已进入产品 Release；发行仍须核对精确 tag、源码和全部门禁，不改写旧资产。
 xcss 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
@@ -116,8 +116,8 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 | `POST /api/v1/xsoc/report` | `Bearer <client credential>` | 512 KiB；单份 strict report；每 Host 速率桶 | 持久事务提交后才返回 `202`；同 Host 同 ID 重放 `accepted=false` |
 
 登录与管理写操作的同源裁决会把所有原始 `Origin`、`Host`/HTTP/2 authority、`Sec-Fetch-Site` 值交给
-xcss；重复、冲突或非当前形状 fail closed。生产 Cookie 名是 `__Host-xcss-xsos-session`，带
-`Path=/; Secure; HttpOnly; SameSite=Strict` 且没有 Domain；开发模式改用非 Secure 的 `xcss-xsos-session`，但
+xcss；重复、冲突或非当前形状 fail closed。生产 Cookie 名是 `__Host-admin-xsos-session`，带
+`Path=/; Secure; HttpOnly; SameSite=Strict` 且没有 Domain；开发模式改用非 Secure 的 `admin-xsos-session`，但
 配置层强制监听 loopback。Session token 和 CSRF token 都是 32-byte 随机值，只以 SHA-256 摘要入库；
 Session 同时受 idle/absolute TTL、账户 active 与 `session_version` 约束，每个 Session 只保留当前
 CSRF 摘要；恢复会话时轮换，不保留旧 token 的兼容窗口。
@@ -142,7 +142,7 @@ xcss `ErrorEnvelope`；健康端点和静态文件不在这个 envelope 范围�
 公共锁绑定数据目录，数据库锁身份来自规范化后的实际数据库路径；数据库本体、锁文件及其父目录仍必须满足当前文件安全检查。不要
 用复制数据库到另一路径的方式绕开锁：那既不是一致快照，也不在当前支持范围。
 
-Host 新建库在初始化事务中写入唯一的 `_xcss_platform_metadata` 记录。启动和 readiness
+Host 新建库在初始化事务中写入唯一的 `_common_platform_metadata` 记录。启动和 readiness
 要求该记录严格匹配 `server-control-plane`；缺失或不匹配时只读拒绝，服务不补写或修复。
 数据库还须满足产品 Schema identity 与 DDL 指纹检查。部署前可通过只读 `config validate --json` 验证这些条件；停服后执行 `doctor` 可检查当前连接与保留任务结构。
 
@@ -173,21 +173,21 @@ Client 配置、命令、网络行为和 xcss 依赖由独立 Client 仓库维�
 Client 的产品 transport 使用 reqwest；HTTPS、响应读取和协议分类规则以该仓库的实现和测试为准。
 只读诊断与实际投递检查是不同操作，执行命令前按所安装 Client 的版本文档确认其副作用。
 
-## 6. Linux Client
+## 6. Linux 客户端
 
-Linux Client 的 deb/rpm、systemd、专用账户、配置权限和卸载流程见
+Linux 客户端 的 deb/rpm、systemd、专用账户、配置权限和卸载流程见
 [平台安装](https://github.com/isarmg/xsoc/blob/main/docs/platform-setup.md)。
 构建与安装命令在 Client 仓库执行。
 
-## 7. Windows Client
+## 7. Windows 客户端
 
-Windows Client 的 MSI、交互 CLI、Windows Service 和权限提升流程由 Client 维护，见
+Windows 客户端 的 MSI、交互 CLI、Windows Service 和权限提升流程由 Client 维护，见
 [平台安装](https://github.com/isarmg/xsoc/blob/main/docs/platform-setup.md)。
 Client 与 Server 版本独立，不使用 Server 版本号代替 MSI 的发行版本。
 
-## 8. macOS Client
+## 8. macOS 客户端
 
-macOS Client 的 pkg、LaunchDaemon、日志、账户与卸载流程见
+macOS 客户端 的 pkg、LaunchDaemon、日志、账户与卸载流程见
 [平台安装](https://github.com/isarmg/xsoc/blob/main/docs/platform-setup.md)。
 原生包签名与平台验收证据随对应 Client 发行物记录。
 
@@ -195,8 +195,8 @@ macOS Client 的 pkg、LaunchDaemon、日志、账户与卸载流程见
 
 Server 仅在显式 `init` 创建当前库。`product_metadata` 必须精确绑定 application `xsos`、格式版本 `1.0.0`、
 schema revision `1` 与 SHA-256
-`3dcffe26f698fbacbc386a1e35dbc9d4f38f516e56115549709703d09987a40d`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
-必须一致。当前 DDL 中管理员列是 `_xcss_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical
+`cb768892031e80900b95395aae25397fac4c37f3aac8b912d911d65c6a277afe`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
+必须一致。当前 DDL 中管理员列是 `_common_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical
 username、非空 password hash、`active IN (0,1)`，`run`/`config validate` 加载已有行时再用 xcss
 primitive 验证 username 和完整 current Argon2id 参数；DDL 还要求 `session_version > 0`，形成存储形状与
 密码策略双层 fail-closed。数据库/
@@ -250,3 +250,11 @@ Server 运维先区分摄取身份错误、资源饱和、数据库健康及 Cli
 持久写入在同一 SQLite 写事务内先准入：实例邀请最多 4096 条，配对请求保留总量最多 8192 条，原始报告每台主机最多 100000 条、全部主机最多 1000000 条。每台主机原始行与 current 报告按保守 main/WAL 预算不超过 1 GiB；数据库与 WAL 总量预算为 8 GiB，新写入还须留出 1 GiB 可用磁盘与 64 MiB 管理操作余量。上限不会清空既有数据；原始报告和小时聚合继续按既有保留设置清理，已提交回执的重试在保留窗口内继续读取原结果。容量不足时拒绝新邀请或新报告，报告返回可重试 503，建议 60 秒后重试。配对容量不足使用既有容量拒绝响应。
 
 每台主机同时在队列或提交中的报告最多 16 份，该额度直到实际事务结束才释放，取消 HTTP 等待不会移除已经准入的写入。全局队列与批大小仍受既有配置硬上限约束。已排队的报告也必须通过事务内容量检查后才能获成功回执；未提交的写入不会返回成功。管理保留余量支持正常管理操作，不承诺磁盘故障或外部写入耗尽空间后的持久写入成功。
+
+## 当前中立接口与旧版数据处理
+
+当前版本只使用 `.state-instance.lock`、`.state-maintenance.lock`、`.state-maintenance-pending.json` 和 `.state-atomic-` 临时文件前缀；离线升级工具采用 `.release-upgrade` 工作目录。服务身份头为 `x-service`，健康状态中的公共源码修订字段为 `common_revision`。管理会话采用 `__Host-admin-xsos-session`，显式开发模式采用 `admin-xsos-session`；生产 Cookie 的 Secure、HttpOnly、SameSite、Path 和 CSRF 约束继续生效。资源清单格式为 `web-assets-v1`，公共数据库内部表及索引采用 `_common_` 前缀。
+
+这些接口没有旧名称别名或旧版兼容分支。旧版升级前，先按本文的停服步骤停止服务、配套客户端及全部维护工具；确认全部进程退出后，完整备份配置、SQLite 数据库及其 WAL/SHM、业务文件和必要的私有凭据。备份包含敏感数据，应保留原有访问权限并离线保存。
+
+保留旧数据目录，按当前安装步骤配置新的私有数据目录，执行显式 `init` 初始化，随后运行 `config validate`，再启动服务、登录管理页面并重新配对客户端。旧配置应人工审阅后填写当前字段，不能整体覆盖新目录。旧业务数据需要另行处理；当前版本不提供自动迁移。不得让旧、新版本同时写同一目录，不得通过删锁文件或修改数据库 metadata 强制启动；当前结构指纹包含实际表名、索引名和 SQL，仅改名称不能证明数据符合当前合同。

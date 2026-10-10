@@ -225,7 +225,7 @@ def server_is_ready(port: int) -> bool:
         with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/readyz", timeout=1
         ) as response:
-            return response.status == 200 and response.getheader("x-xcss-service") == "xsos" and response.read(128) == b'{"ready":true}'
+            return response.status == 200 and response.getheader("x-service") == "xsos" and response.read(128) == b'{"ready":true}'
     except (urllib.error.URLError, TimeoutError):
         return False
 

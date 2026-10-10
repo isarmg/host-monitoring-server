@@ -258,7 +258,7 @@ async fn noncurrent_version_missing_metadata_and_schema_drift_are_read_only_reje
     copy_current_database_image(&missing_platform_metadata).await;
     mutate_checkpoint_and_seed_sidecar_sentinels(
         &missing_platform_metadata,
-        "DELETE FROM _xcss_platform_metadata",
+        "DELETE FROM _common_platform_metadata",
     );
     let before = directory_snapshot(directory.path());
     assert!(

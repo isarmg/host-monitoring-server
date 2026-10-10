@@ -12,7 +12,7 @@
 
 领域按 config / lifecycle / HTTP / telemetry / storage 划分。`http.rs` 解析与授权，`model.rs` 校验业务报告，`telemetry.rs` 管理有界写入，`store.rs` 持久化，`retention.rs` 按已定义边界清理历史。 `main.rs` 组合配置、初始化、运行与停止；入口不重新实现 xcss 机制。
 
-软件身份来自 Cargo，发行配置须与其一致；业务协议来自 `crates/protocol/`，当前 DDL 来自 `schema/`。当前 Schema revision/指纹为 1、`3dcffe26f698fbacbc386a1e35dbc9d4f38f516e56115549709703d09987a40d`，此次保持不变。Rust 与 Web xcss 使用已发布的完整 Git revision、精确版本或具备完整性摘要的发行包，不依赖同级源码作为正式构建输入。候选 xcss 联调只能作为明确记录的临时覆盖，不能伪装成已发布依赖。
+软件身份来自 Cargo，发行配置须与其一致；业务协议来自 `crates/protocol/`，当前 DDL 来自 `schema/`。当前 Schema revision/指纹为 1、`cb768892031e80900b95395aae25397fac4c37f3aac8b912d911d65c6a277afe`，此次保持不变。Rust 与 Web xcss 使用已发布的完整 Git revision、精确版本或具备完整性摘要的发行包，不依赖同级源码作为正式构建输入。候选 xcss 联调只能作为明确记录的临时覆盖，不能伪装成已发布依赖。
 
 ## 运行与安全边界
 

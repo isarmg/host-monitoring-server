@@ -19,7 +19,7 @@ pub const APPLICATION_VERSION: &str = env!("CARGO_PKG_VERSION");
 // Persisted schema identity changes only with a data-format migration.
 pub const SCHEMA_APPLICATION_VERSION: &str = "1.0.0";
 pub const SCHEMA_REVISION: i64 = 1;
-pub const SCHEMA_SHA256: &str = "3dcffe26f698fbacbc386a1e35dbc9d4f38f516e56115549709703d09987a40d";
+pub const SCHEMA_SHA256: &str = "cb768892031e80900b95395aae25397fac4c37f3aac8b912d911d65c6a277afe";
 
 const CURRENT_SCHEMA_SQL: &str = include_str!("../../../schema/generated/current_schema.sql");
 
@@ -259,7 +259,7 @@ fn validate_read_only(path: &Path) -> anyhow::Result<()> {
                 .context("database is not the exact current xsos schema")?;
             let platform_metadata: (i64, i64, String, i64) = sqlx::query_as(
                 "SELECT platform_generation,platform_schema_revision,profile,created_at_micros \
-                 FROM _xcss_platform_metadata WHERE singleton=1",
+                 FROM _common_platform_metadata WHERE singleton=1",
             )
             .fetch_one(&mut connection)
             .await

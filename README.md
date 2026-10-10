@@ -51,6 +51,6 @@ cargo +1.99.0 test --locked --target x86_64-unknown-linux-gnu
 
 硬件监控扩展、平台支持与当前协议要求见 [硬件监控说明](docs/hardware-monitoring.md)。
 
-当前发布版本：**1.0.0**。参见 [1.0.0 发布说明](docs/releases/1.0.0.md)和[项目命名](docs/naming.md)。
+当前发布版本：**1.0.0**。参见 [1.0.0 发布说明](docs/releases/1.0.0.md)。
 
 公共支撑的职责、单体依赖、平台边界与验证方法见[公共支撑说明](docs/common-support.md)。

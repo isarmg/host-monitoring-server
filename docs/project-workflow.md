@@ -40,7 +40,7 @@ synchronous 的 SQLx pool，启动 writer/retention 和 HTTP listener。文件�
 调用的 generation/journal API；不要把外部通用引擎的术语写成产品现有能力。
 
 当前数据库身份是 application `xsos`、version `1.0.0`、schema revision `1`、SHA
-`3dcffe26f698fbacbc386a1e35dbc9d4f38f516e56115549709703d09987a40d`。`_xcss_administrators` DDL 先用 CHECK/
+`cb768892031e80900b95395aae25397fac4c37f3aac8b912d911d65c6a277afe`。`_common_administrators` DDL 先用 CHECK/
 UNIQUE 约束 canonical username、非空 hash 和布尔 active；显式 `init` 创建首个管理员，`run` 与只读 `config validate` 使用 xcss primitive 检查已有 username 与完整 Argon2id 参数。`doctor` 进一步检查 Schema/integrity/FK、保留任务结构和持久授权凭据。
 
 ## 3. 管理员登录和配对
@@ -60,7 +60,7 @@ UNIQUE 约束 canonical username、非空 hash 和布尔 active；显式 `init` 
 address。登录请求恰好是 `{username,password}`。候选 username 必须是 1..64 字节 printable ASCII；
 Server 使用 xcss 唯一规则 trim ASCII whitespace 并转 ASCII 小写，然后要求 canonical 值为
 3..64 字节、首尾 `[a-z0-9]`、全部字符仅 `[a-z0-9._-]`，明确禁止 `@`，相邻分隔符允许。持久
-`_xcss_administrators.username` 只保存 canonical 值并具有 UNIQUE 约束。
+`_common_administrators.username` 只保存 canonical 值并具有 UNIQUE 约束。
 
 登录与 Session 查询只返回 xcss 精确 `AdministratorSession`：`authenticated=true`、`user_id`、
 `username`、`role=admin`、`csrf_token`，不得出现 email、权限数组或附加字段。`admin` 是默认 username；

@@ -6,19 +6,19 @@
 采集、服务管理、路径权限、用户交互与安装生命周期。不能以平台便利为理由改变 wire contract。
 Server 不属于该矩阵，只构建、发行和运行于 `x86_64-unknown-linux-gnu`。
 
-## 6.2 Linux Client
+## 6.2 Linux 客户端
 
 deb/rpm 安装二进制、0600 配置、专用账户和 systemd unit。默认服务沙箱应保持收紧；NVIDIA 等设备访问
 通过明确 drop-in 放宽，而不是默认给所有设备权限。普通卸载保留状态，显式 purge 才清除当前身份和
 spool。
 
-## 6.3 Windows Client
+## 6.3 Windows 客户端
 
 Windows Service 承担长期采集，交互配置与配对由管理员终端中的 `xsoc` CLI 完成；维护 helper
 处理受保护的服务/文件事务。Service helper 使用 GUI subsystem 避免后台弹出控制台，交互 CLI 保持
 console subsystem。WiX 安装失败必须回滚本次创建的文件、服务和权限。
 
-## 6.4 macOS Client
+## 6.4 macOS 客户端
 
 pkg 创建不可登录服务账户、LaunchDaemon 和日志轮转。安装/卸载脚本验证目标路径、账户身份和资源归属，
 不能用宽泛递归删除。安装失败测试要证明无关账户、同名外部文件和已有状态不受影响。

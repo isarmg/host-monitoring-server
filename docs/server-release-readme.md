@@ -400,7 +400,7 @@ Session；invite/pairing 也只有有界定向清理。不能把 raw retention �
 
 重新从可信渠道取得归档与 checksum。检查是否被代理、解压工具或人工编辑改变，不要修补 manifest。
 
-### `release root must be releases/1.0.0`
+### 发行目录错误：`release root must be releases/1.0.0`
 
 root 的直接父目录必须名为 `releases`，root 必须名为 `1.0.0`，整条路径必须规范化且不能经过 symlink。
 
