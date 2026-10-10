@@ -84,10 +84,14 @@ function HostsPage() {
       {page === "details" && <section className="xcss-content-stack" aria-label={t("详细信息与设置", "Details and settings")}>
       {hostId ? <InstanceDetails key={hostId} instanceId={hostId} refreshSignal={generation} changed={refresh} removed={removed} /> : <EmptyState>{t("暂无实例，请点击“新建实例”。", "No instances yet. Create an instance.")}</EmptyState>}
       </section>}
-      {page === "logs" && (logFailure ? <ErrorState requestId={logFailure.requestId} onRetry={refresh}>{t("无法读取所选实例。", "Unable to load the selected instance.")}</ErrorState>
-        : logHost?.selection !== selected ? <LoadingState>{t("正在读取所选实例…", "Loading the selected instance…")}</LoadingState>
+      {page === "logs" && <>
+        {logFailure && <ErrorState requestId={logFailure.requestId} onRetry={refresh}>{logHost?.selection === selected && logHost.host
+          ? t("所选实例刷新失败，页面保留上次成功读取的实例信息。", "Selected instance refresh failed. The last successful instance information is retained.")
+          : t("无法读取所选实例。", "Unable to load the selected instance.")}</ErrorState>}
+        {logHost?.selection !== selected ? !logFailure && <LoadingState>{t("正在读取所选实例…", "Loading the selected instance…")}</LoadingState>
         : logHost.host?.data_error ? <ErrorState>{t("该实例的监控数据无法读取。", "Monitoring data for this instance is unavailable.")}</ErrorState>
-        : logHost.host ? <HostLogs key={logHost.host.id} host={logHost.host} refreshSignal={generation} /> : <EmptyState>{t("所选实例尚无上报记录。", "The selected instance has no report records yet.")}</EmptyState>)}
+        : logHost.host ? <HostLogs key={logHost.host.id} host={logHost.host} refreshSignal={generation} /> : <EmptyState>{t("所选实例尚无上报记录。", "The selected instance has no report records yet.")}</EmptyState>}
+      </>}
   </section>;
 }
 

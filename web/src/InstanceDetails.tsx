@@ -36,7 +36,7 @@ export function InstanceDetails({ instanceId, refreshSignal, changed, removed }:
     return () => controller.abort();
   }, [client, instanceId, refreshSignal]);
 
-  if (failure) return <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState>;
+  if (response === null && failure) return <ErrorState requestId={failure.requestId}>{t("无法读取实例详情", "Unable to load instance details")}</ErrorState>;
   if (response === null) return <LoadingState>{t("正在读取实例详情…", "Loading instance details…")}</LoadingState>;
   // An identity recovery rebinds instance_id; the invitation request_id stays stable.
   // Also accept existing links that use the current instance_id.
@@ -54,6 +54,7 @@ export function InstanceDetails({ instanceId, refreshSignal, changed, removed }:
     <InstanceNameSettings requestId={instance.request_id} name={instance.display_name} draftCache={nameDrafts.current} changed={changed} />
   </>;
   return <div className="xcss-content-stack">
+    {failure && <ErrorState requestId={failure.requestId}>{t("实例详情刷新失败，页面保留上次成功数据。", "Instance details refresh failed. The last successful data is retained.")}</ErrorState>}
     {instance.status === "active" ? <>
       {host?.data_error && <ErrorState>{t("该实例的监控数据无法读取。", "Monitoring data for this instance is unavailable.")}</ErrorState>}
       <HostDetails key={instance.instance_id} hostId={instance.instance_id} hostName={instance.display_name} refreshSignal={refreshSignal} removed={removed} overview={overview} />

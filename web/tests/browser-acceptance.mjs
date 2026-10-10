@@ -113,6 +113,7 @@ try {
       let detailActive = 0, detailRequests = 0, maximumDetailActive = 0, historyRequests = 0, failNextHistory = false, deleted = false, renamed = null;
       let reboundId = null, releaseReboundDetail = null, releaseFirstDetail = null, futureSample = false;
       let delayNextReports = false, releaseReports = null;
+      let failInstanceRefresh = false;
       const selectedHost = () => reboundId ? { ...host(50), id: reboundId, name: "Rebound Host", last_seen_at: "2026-09-04T00:10:00Z" } : host(50);
       page.on("pageerror", error => errors.push(error.message));
       await page.route("**/api/v1/**", async route => {
@@ -133,6 +134,9 @@ try {
           const indexes = Array.from({ length: 51 }, (_, index) => index).filter(index => !deleted || index !== 50);
           const all = indexes.map(index => ({ ...instance(index), ...(index === 50 ? { instance_id: selectedHost().id, ...(renamed ? { display_name: renamed } : {}) } : {}) }));
           const focused = url.searchParams.get("instance_id");
+          if (focused !== null && failInstanceRefresh) {
+            return route.fulfill({ status: 503, json: { code: "service_unavailable", message: "Details refresh unavailable", retryable: true, request_id: "instance-refresh-123" } });
+          }
           assert.ok(focused === null || !url.searchParams.has("cursor"));
           const { values, ...cursors } = focused === null ? listPage(all, url, "instances")
             : { values: all.filter(item => item.request_id === focused || item.instance_id === focused), next_cursor: null, previous_cursor: null };
@@ -508,6 +512,21 @@ try {
       await expect(page.locator("body")).not.toContainText("SECRET history");
       await page.getByRole("alert").getByRole("button", { name: "重试", exact: true }).click();
       await expect(page.getByRole("img", { name: "CPU 历史图" })).toBeVisible();
+      // A failed enclosing instance refresh must not unmount the live monitoring
+      // workspace or discard its independently selected category and time range.
+      await deviceNavigation.getByRole("button", { name: "CPU", exact: true }).click();
+      failInstanceRefresh = true;
+      await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
+      await expect(page.getByRole("alert")).toContainText("instance-refresh-123");
+      await expect(page.getByRole("alert")).toContainText("上次成功数据");
+      await expect(deviceNavigation.getByRole("button", { name: "CPU", exact: true })).toHaveAttribute("aria-pressed", "true");
+      await expect(cpuSection).toContainText("Modern CPU");
+      failInstanceRefresh = false;
+      await page.getByRole("group", { name: "全局操作" }).getByRole("button", { name: "刷新", exact: true }).click();
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(deviceNavigation.getByRole("button", { name: "CPU", exact: true })).toHaveAttribute("aria-pressed", "true");
+      await deviceNavigation.getByRole("button", { name: "历史趋势" }).click();
+      await expect(page.getByRole("button", { name: "24h", exact: true })).toHaveAttribute("aria-pressed", "true");
       for (const theme of ["light", "dark"]) {
         if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /切换到.*模式/ }).click();
         const colors = await page.evaluate(() => ({
@@ -598,6 +617,16 @@ try {
       const focusedRefresh = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/monitoring/client-instances") && new URL(response.url()).searchParams.has("instance_id"));
       await page.getByRole("banner").getByRole("button", { name: "刷新", exact: true }).click();
       await focusedRefresh;
+      await logDate.expectValue("2032-12-30", "2032-12-31");
+      await expect(page.getByRole("table")).toContainText("2032-12-30 09:00:00 +08:00");
+      failInstanceRefresh = true;
+      await page.getByRole("banner").getByRole("button", { name: "刷新", exact: true }).click();
+      await expect(page.getByRole("alert")).toContainText("instance-refresh-123");
+      await expect(page.getByRole("alert")).toContainText("上次成功读取的实例信息");
+      await logDate.expectValue("2032-12-30", "2032-12-31");
+      failInstanceRefresh = false;
+      await page.getByRole("alert").getByRole("button", { name: "重试", exact: true }).click();
+      await expect(page.getByRole("alert")).toHaveCount(0);
       await logDate.expectValue("2032-12-30", "2032-12-31");
       await expect(page.getByRole("table")).toContainText("2032-12-30 09:00:00 +08:00");
       await page.getByRole("button", { name: "详细信息", exact: true }).click();
