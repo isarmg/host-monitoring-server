@@ -20,7 +20,7 @@
 
 xsos 用一个本地控制面接收多台主机的 CPU、内存、磁盘、网络和平台传感器。每台主机运行
 `xsoc`，Client 只发起出站连接，不监听公网端口；服务端负责 invite/配对/激活、报告验证、raw
-存储、内部聚合和管理员 Session。React 页面提供主机列表、采集详情、实例邀请和配对激活；尚不是完整图表控制台。
+存储、内部聚合和管理员 Session。React 页面提供分页主机/实例列表、完整最新详情、实例邀请与配对激活、有界历史趋势、备注和删除；不提供审计查询或任意指标查询。
 
 “只读采集”表示 Client 不以监控为理由修改系统配置。安装器仍需要平台权限创建服务账户、安装服务和
 保护本地状态，因此运行时最小权限与安装时权限要分开理解。
@@ -46,7 +46,7 @@ xsos
   ├─ retention：小时聚合与保留
 
 web
-  └─ React/Vite 最小状态页：管理员认证与 Host 列表（Server 仅 x86_64 GNU/Linux）
+  └─ React/Vite 管理页：管理员认证、实例/Host 分页、配对、详情和历史趋势（Server 仅 x86_64 GNU/Linux）
 ```
 
 协议 crate 是唯一 wire contract，位于 Server 仓库并由 Server workspace path 使用；独立 Client 仓库通过

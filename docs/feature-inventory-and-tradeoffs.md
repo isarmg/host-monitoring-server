@@ -57,10 +57,10 @@
   刻意收敛到 x86_64 GNU/Linux，降低数据库、文件安全与发行验证矩阵。
 - Server 仓库拥有共享协议，独立 Client 仓库通过完整 Git revision 固定依赖；协议变化需要同步更新 Client
   依赖并完成两仓验证，不能复制 DTO 或形成 Server 对 Client 的反向依赖。
-- xcss 共享 username/password/hash/token/origin primitive、严格登录/Session/ErrorEnvelope 合同、
-  浏览器状态机、same-origin HTTP、React/Vite/TS baseline、SQLite PRAGMA 与 Schema identity；产品继续
-  拥有账户/准入、服务端 Session/CSRF 持久生命周期、Cookie、页面、产品响应 guard、DDL、数据库文件/锁
-  和业务状态机，避免基础层反向拥有 Host 生命周期。
+- xcss 提供 username/password/hash/token/origin primitive、严格登录/Session/ErrorEnvelope 合同、
+  管理员认证状态机、Session/CSRF 生命周期与 SQLite 存储、Cookie 构造、浏览器状态机、same-origin HTTP、
+  React/Vite/TS baseline、SQLite PRAGMA 与 Schema identity。产品调用这些公共模块，组合当前数据库结构，
+  继续拥有设备配对/准入、页面、产品响应 guard、业务 DDL、数据库文件/锁和 Host 业务状态机；公共模块不拥有 Host 生命周期。
 
 ## 4. 当前版本与明确不做
 

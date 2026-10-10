@@ -36,8 +36,8 @@ Web 的恢复/登录/登出、401 清理与内存 Session/CSRF 状态统一由
 
 ## 4.3 配对的参与者
 
-Client、管理员 API 和 Server 共同完成配对。管理员 API 创建 invite 并只在创建响应返回一次 activation
-code。Client 在本地生成长期 bearer secret 与独立 polling secret，只发送两者的 SHA-256；Server 从不把
+Client、管理员 API 和 Server 共同完成配对。管理员 API 创建 invite 时返回 activation code，
+并加密持久保存该实例的长期授权码，供已认证管理员在实例页面查看或更换。Client 在本地生成长期 bearer secret 与独立 polling secret，只发送两者的 SHA-256；Server 从不把
 bearer plaintext 发回浏览器。实例授权码与 pairing request 成功激活后，Server 把已提交的 bearer
 摘要绑定到 Host；Client 轮询 active 并原子写入本地 secret、Host identity 与 active binding。授权码不会
 因这次激活被消耗；管理员更换授权码时，Server 会撤销旧 bearer 并要求 Client 重新配对。

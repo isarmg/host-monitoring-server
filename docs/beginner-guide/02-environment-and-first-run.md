@@ -4,7 +4,7 @@
 
 仓库固定 Rust `1.99.0` 与 `.node-version` 中的 Node `26.7.0`。Server Web 使用 lockfile 对应的 npm。
 这个 Node 版本同时满足 xcss 1.0.0 包的 engine 合同；React `19.3.0`、Vite `8.3.3` 与 TypeScript
-`5.8.3` 由 `@xcss/web/admin-web` 的 `ADMIN_WEB_TOOLCHAIN` 精确门禁。Linux 常规开发可覆盖协议和服务端
+`7.0.2` 由 `@xcss/web/admin-web` 的 `ADMIN_WEB_TOOLCHAIN` 精确门禁。Linux 常规开发可覆盖协议和服务端
 逻辑；Server 的唯一目标是 `x86_64-unknown-linux-gnu`，所以完整 workspace 门禁和 Server 启动必须在
 x86_64 glibc Linux 执行。Client 源码、Windows MSI、macOS pkg 以及真实平台采集在独立
 `xsoc` 仓库及其 CI 中验证。
@@ -85,7 +85,7 @@ activation 端点。不要跳过配对后把 401 当作采集器故障。
 |---|---|
 | Web 404 | 二进制资源清单；若选择开发目录，检查 `XCSS_DEV_WEB_DIR` 与已构建 dist |
 | Server 拒绝数据库 | metadata、Schema、文件类型或实例锁 |
-| Pair 一直 pending | invite/code 是否有效、activation 是否调用；当前 React 页本身不能批准 |
+| Pair 一直 pending | invite/code 是否有效、设备请求是否超时、activation 是否完成；React 的 `/activate/{request_id}` 页面可核对设备并提交激活 |
 | TLS 失败 | CA、主机名、证书时间；Client 没有关闭证书校验的开关 |
 | `once` 429/503 | Server 准入或 writer，Client 应保留报告 |
 | 第二实例失败 | state directory 锁，这是预期保护 |

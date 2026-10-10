@@ -211,26 +211,27 @@ XSOS_RETENTION_YIELD_MILLISECONDS=10
 
 | 变量 | 当前约束 |
 |---|---|
-| `DATABASE_URL` | 必填 SQLite URL；生产指向固定 state path |
-| `BIND` | 默认 `127.0.0.1:18105`；推荐仅 loopback |
+| `XSOS_DATABASE_URL` | SQLite URL；生产指向固定 state path。未提供时可由 `XSOS_DATA_DIR` 派生 `xsos.sqlite3` |
+| `XSOS_DATA_DIR` | 私有数据目录绝对路径；数据库必须是其直接子文件 |
+| `XSOS_BIND` | 默认 `127.0.0.1:18105`；推荐仅 loopback |
 | `XCSS_DEV_WEB_DIR` | 正式发行禁止；仅 unbound 开发构建可选择绝对目录热更新 |
-| `DEVELOPMENT` | 生产 `false`；`true` 只允许 loopback bind |
-| `BOOTSTRAP_ADMIN_USERNAME` | 默认 `admin`；必须是当前 canonical username |
-| `BOOTSTRAP_ADMIN_PASSWORD` | 空库时必填，12..1024 bytes、无 ASCII control |
-| `CLIENT_AUTHORIZATION_KEY` | 必填；标准 Base64 编码的 32 个随机字节；用于加密每实例长期授权码 |
-| `TELEMETRY_QUEUE_CAPACITY` | 默认 256，最大 1024 |
-| `TELEMETRY_BATCH_SIZE` | 默认 64，1..min(512, queue) |
-| `TELEMETRY_FLUSH_MILLISECONDS` | 默认 25，1..1000 |
-| `TELEMETRY_ENQUEUE_WAIT_MILLISECONDS` | 默认 10，1..250 |
-| `TELEMETRY_REQUEST_TIMEOUT_MILLISECONDS` | 默认 10000，100..30000，且大于 enqueue + flush |
-| `TELEMETRY_SHUTDOWN_DRAIN_MILLISECONDS` | 默认 15000，100..60000 |
-| `RAW_RETENTION_DAYS` | 默认 7，1..365 |
-| `AGGREGATE_RETENTION_DAYS` | 默认 365，最大 3650，严格大于 raw |
-| `RETENTION_INTERVAL_SECONDS` | 默认 300，1..86400 |
-| `RETENTION_BATCH_SIZE` | 默认 256，1..512 |
-| `RETENTION_MAX_TRANSACTIONS_PER_RUN` | 默认 12，3..30 |
-| `RETENTION_MAX_RUN_MILLISECONDS` | 默认 2000，100..10000，且短于维护 interval |
-| `RETENTION_YIELD_MILLISECONDS` | 默认 10，1..100 |
+| `XSOS_DEVELOPMENT` | 生产 `false`；`true` 只允许 loopback bind |
+| `XSOS_BOOTSTRAP_ADMIN_USERNAME` | 默认 `admin`；必须是当前 canonical username |
+| `XSOS_BOOTSTRAP_ADMIN_PASSWORD` | 空库时必填，12..1024 bytes、无 ASCII control |
+| `XSOC_AUTHORIZATION_KEY` | 必填；标准 Base64 编码的 32 个随机字节；用于加密每实例长期授权码 |
+| `XSOS_TELEMETRY_QUEUE_CAPACITY` | 默认 256，最大 1024 |
+| `XSOS_TELEMETRY_BATCH_SIZE` | 默认 64，1..min(512, queue) |
+| `XSOS_TELEMETRY_FLUSH_MILLISECONDS` | 默认 25，1..1000 |
+| `XSOS_TELEMETRY_ENQUEUE_WAIT_MILLISECONDS` | 默认 10，1..250 |
+| `XSOS_TELEMETRY_REQUEST_TIMEOUT_MILLISECONDS` | 默认 10000，100..30000，且大于 enqueue + flush |
+| `XSOS_TELEMETRY_SHUTDOWN_DRAIN_MILLISECONDS` | 默认 15000，100..60000 |
+| `XSOS_RAW_RETENTION_DAYS` | 默认 7，1..365 |
+| `XSOS_AGGREGATE_RETENTION_DAYS` | 默认 365，最大 3650，严格大于 raw |
+| `XSOS_RETENTION_INTERVAL_SECONDS` | 默认 300，1..86400 |
+| `XSOS_RETENTION_BATCH_SIZE` | 默认 256，1..512 |
+| `XSOS_RETENTION_MAX_TRANSACTIONS_PER_RUN` | 默认 12，3..30 |
+| `XSOS_RETENTION_MAX_RUN_MILLISECONDS` | 默认 2000，100..10000，且短于维护 interval |
+| `XSOS_RETENTION_YIELD_MILLISECONDS` | 默认 10，1..100 |
 
 未知 `XSOS_*` 变量不会自动被拒绝，必须通过配置审查捕获拼写错误，不能把“进程已启动”解释
 为每个未知变量都生效。
@@ -332,8 +333,8 @@ Server 不终止 TLS。代理负责证书、私钥、续期、HSTS 和公网限�
 登录限流使用实际 TCP peer，不信任 `Forwarded` 或 `X-Forwarded-For`。若代理复用一个后端源地址，来源
 桶看到的是代理而非公网客户端；不能通过信任任意转发头来“修复”。
 
-生产 Cookie 是 `__Host-host_session`，带 `Path=/; Secure; HttpOnly; SameSite=Strict` 且无 Domain。
-`DEVELOPMENT=true` 只用于 loopback 调试并改用非 Secure Cookie，不能用于生产。
+生产 Cookie 是 `__Host-admin-xsos-session`，带 `Path=/; Secure; HttpOnly; SameSite=Strict` 且无 Domain。
+`XSOS_DEVELOPMENT=true` 只用于 loopback 调试，使用 `admin-xsos-session` 非 Secure Cookie，不能用于生产。
 
 ## 11. 当前 HTTP 与身份面
 

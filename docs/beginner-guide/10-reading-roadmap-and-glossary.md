@@ -20,8 +20,8 @@ writer、retention、release 验证和 Web 调用。
 
 ## 10.3 建议练习
 
-1. 在临时环境完成 probe、通过 API/code 激活 pair、once，并在 Web Host 列表 JSON 中看到 latest 摘要；
-   同时记录当前缺少 React activation 页面。
+1. 在临时环境完成 `probe`、`pair`、`once`；通过 React 的 `/activate/{request_id}` 页面核对设备并激活，
+   或用 Client 的授权码能力端点激活，随后在 Web Host 列表与详情中核对同一 Host 的 latest 摘要。
 2. 断开 Server，观察 spool；恢复后确认相同 report ID 被接收。
 3. 让假 Server 返回 429，确认遵循退避且容量有界。
 4. 尝试同时启动两个 Client，确认状态锁拒绝第二实例。
@@ -53,8 +53,8 @@ writer、retention、release 验证和 Web 调用。
 ## 10.5 完成学习的标准
 
 维护者应能独立回答：报告在哪一刻算持久化；断线后为何保留原 ID；同 Host 同 ID 改正文为何当前不会
-冲突；配对怎样防止身份分叉以及 React 为何还不能完成激活；latest 为什么不随 raw 清理消失；aggregate
-为何当前查不到；Client 三平台安装权限怎样收敛；Schema 变化何时才需要外部仓新增具体 edge；一次名称
+冲突；配对怎样防止身份分叉，以及 React 与 Client capability 激活分别验证哪些身份；latest 为什么不随 raw 清理消失；
+历史 `resolution=auto` 如何合并 raw 与 hourly aggregate；Client 三平台安装权限怎样收敛；Schema 变化何时才需要外部仓新增具体 edge；一次名称
 变化要检查哪些制品层。
 
 ## 10.6 后续文档

@@ -36,12 +36,12 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 xcss 1.0.0 / `627d988a4ed471469ed4fdce8af0ea6b5c131ce6`，一个 @xcss/web 包使用
-同版 Release tarball 与准确 SHA-512 integrity，无相邻 xcss 路径依赖。本轮使用封存的本地候选 Git 对象和真实 tarball 验证；远端发布与独立 CI 仍须以当前精确提交的正式证据核对，
+当前 Server Rust 固定 xcss 1.0.0 / `b0524c4fb018b5ba4f27ad71bf32b74c8ef0a972`，一个 @xcss/web 包使用
+同版 Release tarball 与准确 SHA-512 integrity，无相邻 xcss 路径依赖。正式发行使用锁定的官方 Git 提交和真实 tarball；远端发布与独立 CI 须以当前精确提交的正式证据核对，
 见[本项目当前 CI](https://github.com/isarmg/xsos/actions)与[正式发行资产](https://github.com/isarmg/xsos/releases)。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护。
 独立构建通过不等于当前主分支改动已进入产品 Release；发行仍须核对精确 tag、源码和全部门禁，不改写旧资产。
-xcss 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
+xcss 变更必须显式发布新版本并替换当前合同，同时通过 xsos 的 Rust 全矩阵、Web clean build、
 SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同。
 
 当前 React 管理台以实例列表和实例详情为主线：列表提供完整实例集合、同页监控摘要、长期授权码和
@@ -78,8 +78,8 @@ SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同�
 | `RETENTION_MAX_RUN_MILLISECONDS` | 2000，范围 100..10000 | 单轮时间预算，并且必须短于 maintenance interval |
 | `RETENTION_YIELD_MILLISECONDS` | 10，范围 1..100 | 相邻维护事务之间主动让出执行权的时间 |
 
-例如表中的 `DATABASE_URL` 对应 `XSOS_DATABASE_URL`，而 `XSOC_AUTHORIZATION_KEY` 和 `XCSS_DEV_WEB_DIR` 不再追加 `XSOS_`。程序只读取环境，
-不会解析 `/etc/isarmg/xsos.env` 文件；该路径是 systemd unit 的部署合同。未知环境变量不会被
+例如表中的 `DATABASE_URL` 对应 `XSOS_DATABASE_URL`，而 `XSOC_AUTHORIZATION_KEY` 和 `XCSS_DEV_WEB_DIR` 不再追加 `XSOS_`。程序接受命令行、显式环境映射、当前 JSON 配置和默认值，但不直接解析
+`/etc/isarmg/xsos.env` 文本文件；该文件由 systemd 的 `EnvironmentFile` 加载为进程环境。未知环境变量不会被
 Server 拒绝，因此应通过配置管理审查拼写，不能把“进程能启动”当作未知变量已生效。
 
 管理员 username 的精确合同是：登录候选 1..64 字节 printable ASCII；trim ASCII whitespace、ASCII
@@ -101,10 +101,10 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 | `POST /api/v1/auth/login` | 浏览器公开入口 | 16 KiB；exact `{username,password}`；同源；TCP peer 与规范 username 双重限流 | `200` + exact Session；设置 Cookie；不知道账户时仍做 dummy Argon2；成功响应 `no-store` |
 | `GET /api/v1/auth/session` | 管理员 Session Cookie | 不接受业务正文；不要求 CSRF | 轮换一个 CSRF token 并返回 exact Session；成功响应 `no-store` |
 | `POST /api/v1/auth/logout` | 管理员 Session + CSRF + 同源 | 无业务正文 | 撤销当前 Session、删除其 CSRF 摘要、清除 Cookie；成功响应 `204 no-store` |
-| `GET /api/v1/monitoring/hosts` | 管理员 Session | 无查询参数 | 按实例名称字母数字顺序返回全部 Host summary；React 总览与实例/详情入口共同使用 |
+| `GET /api/v1/monitoring/hosts` | 管理员 Session | 可选 `cursor` 或 `host_id`，两者不混用 | 按实例名称字母数字顺序返回最多 50 条 Host summary、全局统计及前后游标；`host_id` 可定位单台主机；React 总览与实例/详情入口共同使用 |
 | `GET /api/v1/monitoring/hosts/{host_id}` | 管理员 Session | canonical UUID | Host summary 与可空 latest 原始报告；当前 Web 详情使用列表中的同一投影，端点供独立调用方精确读取 |
 | `GET /api/v1/monitoring/hosts/{host_id}/history` | 管理员 Session | 原始模式使用 `from/to/limit`；图表模式使用 `from/to/resolution=auto/max_points`，跨度最多 31 天、点数 100..1000 | 原始点，或在同一快照内无重复合并 raw 与 hourly 的时间桶；响应明确粒度、来源和实际对齐范围 |
-| `GET/POST /api/v1/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | 管理路由组正文上限 16 KiB；POST exact `display_name?`，省略时使用默认名称；授权码不设有效期 | 返回完整实例列表和可查看的实例授权码；新建 `201`；成功响应 `no-store` |
+| `GET/POST /api/v1/monitoring/client-instances` | 管理员 Session；POST 另需 CSRF/同源 | GET 可选 `cursor` 或 `instance_id`，两者不混用；管理路由组正文上限 16 KiB；POST exact `display_name?`，省略时使用默认名称；授权码不设有效期 | GET 返回最多 50 条实例、关联主机、可查看的授权码及前后游标；`instance_id` 可定位单个实例；新建 `201`；成功响应 `no-store` |
 | `PUT /api/v1/monitoring/client-instances/{request_id}/authorization` | 管理员 Session + CSRF + 同源 | canonical UUID；exact `authorization_code`，36 位小写英文字母或数字 | 更新加密密文/摘要、撤销旧 Client credential，并将实例恢复为 pending；Client 需重新配对 |
 | `DELETE /api/v1/monitoring/client-instances/{request_id}` | 管理员 Session + CSRF + 同源 | canonical UUID；pending 首次调用转 cancelled，cancelled 再次调用永久删除 | `204`；不存在为 404，active 为 409；Web 分别显示“取消配对”和“删除实例” |
 | `POST /api/v1/xsoc/activate-admin` | 管理员 Session + CSRF + 同源 | 16 KiB 管理上限；exact request ID + activation code | 与 capability 激活进入同一事务；React 配对确认流程调用 |
@@ -168,7 +168,7 @@ reset CLI 不从 argv 读取密码。不要把真实密码字面量写进可持�
 
 ## 5. Client 配置与诊断
 
-Client 配置、命令、网络行为和 xcss 依赖由独立 Client 仓库维护，见
+Client 配置、命令、网络行为和客户端公共支撑依赖由独立 Client 仓库维护，见
 [配置与诊断](https://github.com/isarmg/xsoc/blob/main/docs/configuration.md)。
 Client 的产品 transport 使用 reqwest；HTTPS、响应读取和协议分类规则以该仓库的实现和测试为准。
 只读诊断与实际投递检查是不同操作，执行命令前按所安装 Client 的版本文档确认其副作用。

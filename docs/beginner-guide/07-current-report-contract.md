@@ -62,8 +62,8 @@ maintenance 用时目前不能由产品端点完整观测。它们是应补的�
 当前四元身份是 `xsos` / `1.0.0` / schema revision `1` /
 `cb768892031e80900b95395aae25397fac4c37f3aac8b912d911d65c6a277afe`。管理员列为
 `_common_administrators.username`；DDL CHECK/UNIQUE 与启动时 xcss canonical username/current Argon2id 加载
-检查是两层不同防线。`doctor` 只覆盖 Schema、integrity、foreign key 和 retention 结构，不应被当作账户
-内容校验。
+检查是两层不同防线。`doctor` 检查 Schema、integrity、foreign key、retention 结构及持久授权码密文；
+管理员行的规范用户名与 hash 内容校验由 `run` 和只读 `config validate` 执行，不能用 `doctor` 替代。
 
 ## 7.10 协议变更验收
 
