@@ -230,6 +230,7 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
   const end = Number.isFinite(requestedEnd) ? requestedEnd : Math.max(...pointTimes);
   const values = points.flatMap(point => lines.map(line => point[line.key].avg).filter((value): value is number => value !== null));
   const ceiling = Math.max(unit === "percent" ? 100 : 1, ...values);
+  const floor = unit === "℃" ? Math.min(0, ...values) : 0;
   const xAt = (value: string) => {
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
@@ -246,7 +247,7 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
       if (current.length && (value === null || previousStart === null || start > previousStart + stepMilliseconds)) {
         result.push(current); current = [];
       }
-      if (value !== null) current.push({ x: xAt(point.start), y: 100 - Math.max(0, Math.min(100, value * 100 / ceiling)) });
+      if (value !== null) current.push({ x: xAt(point.start), y: 100 - Math.max(0, Math.min(100, (value - floor) * 100 / (ceiling - floor))) });
       previousStart = start;
     }
     if (current.length) result.push(current);
@@ -261,7 +262,7 @@ function MetricChartBlock({ title, unit, response, lines, loading, failure }: { 
         ? <circle key={`${line.key}-${index}`} cx={segment[0].x} cy={segment[0].y} r="0.8" fill={line.color} />
         : <polyline key={`${line.key}-${index}`} points={segment.map(({ x, y }) => `${x},${y}`).join(" ")} fill="none" stroke={line.color} vectorEffect="non-scaling-stroke" />))}
     </svg> : <p>{loading ? t("正在读取…", "Loading…") : t("暂时不可用", "Unavailable")}</p>}
-    {hasSamples && <p className="host-chart-scale">{unit === "bytes" ? t("峰值 {0}/秒", "Peak {0}/s", [formatBytes(ceiling)]) : `${t("纵轴", "Vertical axis")} 0–${ceiling.toLocaleString(getLocale())} ${unit === "percent" ? "%" : unit}`}</p>}
+    {hasSamples && <p className="host-chart-scale">{unit === "bytes" ? t("峰值 {0}/秒", "Peak {0}/s", [formatBytes(ceiling)]) : `${t("纵轴", "Vertical axis")} ${floor.toLocaleString(getLocale())}–${ceiling.toLocaleString(getLocale())} ${unit === "percent" ? "%" : unit}`}</p>}
   </section>;
 }
 
