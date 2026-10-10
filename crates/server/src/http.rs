@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use xcss_server_cli::{ContractJson, ContractPath, ContractQuery};
+use xcss::server_cli::{ContractJson, ContractPath, ContractQuery};
 
 use axum::{
     Json, Router,
@@ -18,9 +18,9 @@ use axum::{
 use chrono::{DateTime, Local, NaiveDate, TimeDelta, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use xcss_admin_auth::AdministratorOriginMode;
-use xcss_admin_core::AdministratorService;
-use xcss_admin_sqlite::SqliteAdministratorStore;
+use xcss::admin_auth::AdministratorOriginMode;
+use xcss::admin_core::AdministratorService;
+use xcss::admin_sqlite::SqliteAdministratorStore;
 use xsos_protocol::{
     ActivateClientRequest, ActivateClientResponse, ActivatePairingStatus,
     CLIENT_REPORT_MAX_BODY_BYTES, ClientPairingRequest, ClientPairingResponse,
@@ -48,7 +48,7 @@ pub struct AppState {
     pub secrets: crate::crypto::SecretBox,
     administrator: Arc<AdministratorService<SqliteAdministratorStore>>,
     administrator_origin: AdministratorOriginMode,
-    runtime: xcss_server_runtime::RuntimeHandle,
+    runtime: xcss::server_runtime::RuntimeHandle,
     pairing_admission: crate::pairing_admission::PairingAdmission,
     report_buckets: Arc<Mutex<ReportBuckets>>,
     list_admission: crate::pagination::Admission,
@@ -89,7 +89,7 @@ impl AppState {
         telemetry: TelemetryWriter,
         secrets: crate::crypto::SecretBox,
     ) -> Self {
-        let runtime = xcss_server_runtime::platform_handle(product_descriptor())
+        let runtime = xcss::server_runtime::platform_handle(product_descriptor())
             .expect("the compiled xsos descriptor is valid");
         Self::with_runtime(pool, origin, telemetry, runtime, secrets)
     }
@@ -98,7 +98,7 @@ impl AppState {
         pool: sqlx::SqlitePool,
         administrator_origin: AdministratorOriginMode,
         telemetry: TelemetryWriter,
-        runtime: xcss_server_runtime::RuntimeHandle,
+        runtime: xcss::server_runtime::RuntimeHandle,
         secrets: crate::crypto::SecretBox,
     ) -> Self {
         let administrator = Arc::new(AdministratorService::new(SqliteAdministratorStore::new(
@@ -131,11 +131,11 @@ impl AppState {
     }
 }
 
-pub fn product_descriptor() -> xcss_server_runtime::ProductDescriptor {
-    xcss_server_runtime::ProductDescriptor {
+pub fn product_descriptor() -> xcss::server_runtime::ProductDescriptor {
+    xcss::server_runtime::ProductDescriptor {
         id: "xsos".into(),
         version: env!("CARGO_PKG_VERSION").into(),
-        foundation_revision: env!("XCSS_FOUNDATION_REVISION").into(),
+        xcss_revision: env!("XCSS_REVISION").into(),
         profile: "server-control-plane".into(),
         capabilities: vec![
             "embedded-web".into(),
@@ -263,10 +263,10 @@ impl ReportBuckets {
 pub fn router(state: AppState, static_dir: impl Into<Option<PathBuf>>) -> anyhow::Result<Router> {
     let directory = static_dir
         .into()
-        .map(xcss_web_assets::DirectoryAssets::new)
+        .map(xcss::web_assets::DirectoryAssets::new)
         .transpose()?
         .map(Arc::new);
-    let platform = xcss_server_runtime::platform_router(
+    let platform = xcss::server_runtime::platform_router(
         state.runtime.clone(),
         "xsos",
         state.administrator_origin,
@@ -367,7 +367,7 @@ pub fn router(state: AppState, static_dir: impl Into<Option<PathBuf>>) -> anyhow
         .method_not_allowed_fallback(|| async { Error::MethodNotAllowed })
         .layer(axum::middleware::from_fn(log_request))
         .layer(middleware::from_fn(
-            xcss_server_cli::request_context_middleware,
+            xcss::server_cli::request_context_middleware,
         )))
 }
 
@@ -380,7 +380,7 @@ async fn console_admission(
     mut request: Request,
     next: Next,
 ) -> Response {
-    let identity = match xcss_admin_axum::authenticate_request(
+    let identity = match xcss::admin_axum::authenticate_request(
         &state.administrator,
         request.headers(),
         request.uri(),
@@ -1167,7 +1167,7 @@ async fn log_request(
     use tracing::Instrument;
     let request_id = request
         .extensions()
-        .get::<xcss_contracts::RequestId>()
+        .get::<xcss::contracts::RequestId>()
         .map(|value| value.as_str().to_owned())
         .unwrap_or_default();
     let span = tracing::info_span!("http.request", request_id = request_id.as_str());
@@ -1261,7 +1261,7 @@ mod tests {
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::HOST, "127.0.0.1")
             .header(header::ORIGIN, "http://127.0.0.1")
-            .header(xcss_admin_auth::SEC_FETCH_SITE_HEADER, "same-origin")
+            .header(xcss::admin_auth::SEC_FETCH_SITE_HEADER, "same-origin")
             .body(body.into())
             .unwrap();
         request.extensions_mut().insert(ConnectInfo(
@@ -1311,13 +1311,12 @@ mod tests {
             .to_vec()
     }
 
-    async fn error_envelope(response: Response) -> xcss_error::ErrorEnvelope {
+    async fn error_envelope(response: Response) -> xcss::error::ErrorEnvelope {
         assert_eq!(
             response.headers().get(header::CONTENT_TYPE).unwrap(),
             "application/json"
         );
-        serde_json::from_slice(&body_bytes(response).await)
-            .expect("strict Foundation error envelope")
+        serde_json::from_slice(&body_bytes(response).await).expect("strict xcss error envelope")
     }
 
     #[test]
@@ -1558,7 +1557,7 @@ mod tests {
     async fn login_json_body_is_bounded_before_password_work() {
         let body = format!(
             r#"{{"username":"admin","password":"{}"}}"#,
-            "x".repeat(xcss_admin_core::ADMIN_BODY_MAX_BYTES)
+            "x".repeat(xcss::admin_core::ADMIN_BODY_MAX_BYTES)
         );
         let response = app()
             .await

@@ -29,12 +29,12 @@ fallback。
 
 ## 1.4 两类身份
 
-浏览器管理员以本地 username/password 登录，通过 Foundation 精确 Session 与 CSRF 调用受保护 API；
+浏览器管理员以本地 username/password 登录，通过 xcss 精确 Session 与 CSRF 调用受保护 API；
 设备通过配对发放的 credential 提交报告。二者不能互换。管理员激活 pairing 并不意味着设备获得浏览器
 权限；设备 credential 也不能调用管理 API。
 
 管理 role 只有 `admin`，没有 viewer/operator/RBAC。`admin` 同时是默认 username，但 username 可以是
-其他符合 Foundation canonical 规则的值。登录 wire object 恰好含 `username/password`；Session 恰好含
+其他符合 xcss canonical 规则的值。登录 wire object 恰好含 `username/password`；Session 恰好含
 `authenticated/user_id/username/role/csrf_token`。Server 和 Web 不保存、不返回也不接受 email 字段。
 
 ## 1.5 两条数据通路

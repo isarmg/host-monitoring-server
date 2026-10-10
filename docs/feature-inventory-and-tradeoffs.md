@@ -9,7 +9,7 @@
 | 能力 | 实现入口 | 主要验证 |
 |---|---|---|
 | 配对与长期授权码 | `crates/server/src/{http,store,crypto,pairing_admission}.rs` | 过期、取消、轮换、准入预算、重复和并发绑定 |
-| 管理员、Session 与 CSRF | `http.rs`、`store.rs`、Foundation admin 依赖 | `tests/browser_sessions.rs` 的真实路由合同 |
+| 管理员、Session 与 CSRF | `http.rs`、`store.rs`、xcss admin 依赖 | `tests/browser_sessions.rs` 的真实路由合同 |
 | 实例与 Host 管理 | `model.rs`、`store.rs`、`web/src/{Instances,HostDetails}.tsx` | 名称边界、排序、备注、取消/删除与权限 |
 | 报告协议与宽整数 | `crates/protocol/src/`、`model.rs`、`hardware_validation.rs` | 字段/集合/单位、未知字段、错误信封、GPU 聚合计数 |
 | 有界摄取与持久 ACK | `telemetry.rs`、`store.rs` | `tests/telemetry_writer.rs` 的队列、事务、超时和关闭 |
@@ -18,19 +18,19 @@
 | SQLite 身份、锁与完整性 | `database_schema.rs`、`database_lock.rs` | `tests/{sqlite_connection,database_locking,sqlite_store}.rs` |
 | HTTP 状态与恢复语义 | `error.rs`、`http.rs` | `tests/client_error_contract.rs` 的真实 Router 响应 |
 | 发行物与目标平台 | `release_bundle.rs`、`release_contract.rs`、`scripts/` | release identity、工具脚本测试、固定 GNU/Linux AMD64 目标 |
-| 管理页面 | `web/src/`、Foundation Web 依赖 | Web 类型检查与构建；原生浏览器交互另行验收 |
+| 管理页面 | `web/src/`、xcss Web 依赖 | Web 类型检查与构建；原生浏览器交互另行验收 |
 
 ## 1. Server 能力
 
 | 功能 | 当前实现 | 取舍/限制 |
 |---|---|---|
-| 管理身份 | 本地 canonical username、当前 Argon2id、随机 Session/CSRF、Foundation 精确登录与 Session 形状 | 固定 `role=admin`，默认 username `admin`；没有 email、viewer/operator/RBAC，也不依赖中央账户或共享 Session |
+| 管理身份 | 本地 canonical username、当前 Argon2id、随机 Session/CSRF、xcss 精确登录与 Session 形状 | 固定 `role=admin`，默认 username `admin`；没有 email、viewer/operator/RBAC，也不依赖中央账户或共享 Session |
 | 配对 | 每实例长期 code、Client request/poll、管理员或 Client 激活端点、分维度限流 | React 可查看/更换加密保存的授权码；更换会撤销旧 Client 并要求重新配对 |
 | 报告 API | `/api/v1/xsoc` 当前协议 | 不注册任何平行版本或 alias |
-| API 错误 | Foundation `ErrorEnvelope`：`code/message/retryable/request_id?/details?` | 所有 `/api` 非 2xx（含 extractor/404/405）使用同一严格顶层结构 |
+| API 错误 | xcss `ErrorEnvelope`：`code/message/retryable/request_id?/details?` | 所有 `/api` 非 2xx（含 extractor/404/405）使用同一严格顶层结构 |
 | 写入 | 有界队列、单 writer、batch、savepoint | 单库单活进程，不是分布式写集群 |
 | 历史 | raw 标量查询、raw/hourly 自动粒度趋势、按服务器接收日期范围读取原始报告日志及两级保留 | 图表查询最长 31 天、最多 1000 点；日志默认当天，年月日数字直接编辑、回车应用包含起止当天的范围；每页 50 条正反游标，受 8 MiB / 5 秒 Web 请求预算约束，前后端拒绝非法日期与倒置范围 |
-| Web | Foundation 管理员 client/hook + Host 列表 exact guard，编译进发行物 | 提供主机列表、采集详情、历史图表、上报日志及实例邀请/配对；没有 audit 读取界面 |
+| Web | xcss 管理员 client/hook + Host 列表 exact guard，编译进发行物 | 提供主机列表、采集详情、历史图表、上报日志及实例邀请/配对；没有 audit 读取界面 |
 | 诊断 | health/readiness、doctor、事务内 audit 写入 | 不提供数据库修复或 audit 读取 API |
 | 发布 | source-bound binary、全树 manifest、固定目录 | 同版本不可原地覆盖 |
 | 平台 | 仅 `x86_64-unknown-linux-gnu` 构建、发行和运行 | 不提供 ARM Linux、musl、Windows 或 macOS Server；跨平台只属于 Client |
@@ -57,7 +57,7 @@
   刻意收敛到 x86_64 GNU/Linux，降低数据库、文件安全与发行验证矩阵。
 - Server 仓库拥有共享协议，独立 Client 仓库通过完整 Git revision 固定依赖；协议变化需要同步更新 Client
   依赖并完成两仓验证，不能复制 DTO 或形成 Server 对 Client 的反向依赖。
-- Foundation 共享 username/password/hash/token/origin primitive、严格登录/Session/ErrorEnvelope 合同、
+- xcss 共享 username/password/hash/token/origin primitive、严格登录/Session/ErrorEnvelope 合同、
   浏览器状态机、same-origin HTTP、React/Vite/TS baseline、SQLite PRAGMA 与 Schema identity；产品继续
   拥有账户/准入、服务端 Session/CSRF 持久生命周期、Cookie、页面、产品响应 guard、DDL、数据库文件/锁
   和业务状态机，避免基础层反向拥有 Host 生命周期。

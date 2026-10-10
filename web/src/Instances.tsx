@@ -1,8 +1,8 @@
 import { displayLabel } from "./display-labels";
-import { t, getLocale } from "@xcss/admin-ui/i18n";
+import { t, getLocale } from "@xcss/web/admin-ui/i18n";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, Dialog, ErrorState, FormField, TextField, Table, EmptyState, LoadingState, ConfirmDangerDialog } from "@xcss/admin-ui";
-import { errorRequestId, useAdminApplication } from "@xcss/admin-shell";
+import { Button, Dialog, ErrorState, FormField, TextField, Table, EmptyState, LoadingState, ConfirmDangerDialog } from "@xcss/web/admin-ui";
+import { errorRequestId, useAdminApplication } from "@xcss/web/admin-shell";
 import { isActivation, isInstance, isInstances, isNoContent, isPairingSummary, isUuid,
   LIST_REQUEST_BUDGET, type ClientInstance, type ClientInstanceListResponse, type HostStatistics, type PairingSummary } from "./api";
 import { PageNavigation } from "./PageNavigation";
@@ -22,7 +22,7 @@ function randomAuthorizationCode(): string {
   return value;
 }
 
-// Business request lifetime only; authentication and CSRF stay in Foundation.
+// Business request lifetime only; authentication and CSRF stay in xcss.
 function useAction() {
   const ref = useRef<AbortController | null>(null);
   const [pending, setPending] = useState(false);

@@ -6,7 +6,7 @@
 xsos
 ├─ Server
 │  ├─ 验证发行树/配置/当前 Schema
-│  ├─ Foundation admin 用户名登录与 Session/CSRF
+│  ├─ xcss admin 用户名登录与 Session/CSRF
 │  ├─ Client 实例授权码、配对请求与凭据激活
 │  ├─ 报告限流 -> 有界队列 -> 单 SQLite writer
 │  └─ 原始报告 -> 小时聚合 -> 分层保留
@@ -34,19 +34,19 @@ Linux、机器是 x86_64。正式二进制要求 `run --release-root` 指向规�
 Schema、Web 文件集合/Hash/权限，再解析
 `XSOS_*`。随后取得数据库 instance
 排他锁和 maintenance 共享锁；已有库先用独立只读连接验证 `product_metadata` 与实际
-`sqlite_schema` 指纹，最后才通过 `xcss-sqlite` 打开 WAL、foreign keys、5 秒 busy timeout、FULL
+`sqlite_schema` 指纹，最后才通过 `xcss::sqlite` 打开 WAL、foreign keys、5 秒 busy timeout、FULL
 synchronous 的 SQLx pool，启动 writer/retention 和 HTTP listener。文件创建/权限、精确产品 DDL、
-只读预检和锁仍由产品负责；Foundation 不执行 migration 或初始化产品表。Host 数据库没有可供运维
+只读预检和锁仍由产品负责；xcss 不执行 migration 或初始化产品表。Host 数据库没有可供运维
 调用的 generation/journal API；不要把外部通用引擎的术语写成产品现有能力。
 
 当前数据库身份是 application `xsos`、version `1.0.0`、schema revision `1`、SHA
 `3dcffe26f698fbacbc386a1e35dbc9d4f38f516e56115549709703d09987a40d`。`_xcss_administrators` DDL 先用 CHECK/
-UNIQUE 约束 canonical username、非空 hash 和布尔 active；显式 `init` 创建首个管理员，`run` 与只读 `config validate` 使用 Foundation primitive 检查已有 username 与完整 Argon2id 参数。`doctor` 进一步检查 Schema/integrity/FK、保留任务结构和持久授权凭据。
+UNIQUE 约束 canonical username、非空 hash 和布尔 active；显式 `init` 创建首个管理员，`run` 与只读 `config validate` 使用 xcss primitive 检查已有 username 与完整 Argon2id 参数。`doctor` 进一步检查 Schema/integrity/FK、保留任务结构和持久授权凭据。
 
 ## 3. 管理员登录和配对
 
 ```text
-{username,password} -> Foundation username 规范化 + Argon2id 校验 -> SQLite Session + CSRF
+{username,password} -> xcss username 规范化 + Argon2id 校验 -> SQLite Session + CSRF
   -> 受保护管理 API 创建实例并返回该实例的长期 authorization code
   -> Client 创建含 token/polling-secret 摘要的 pairing request
   -> code 经 Client 激活端点或管理员激活端点提交
@@ -58,16 +58,16 @@ UNIQUE 约束 canonical username、非空 hash 和布尔 active；显式 `init` 
 
 来源、设备、请求/邀请和管理员账户分别拥有有界准入预算；TCP peer 是来源事实，默认不信任 forwarded
 address。登录请求恰好是 `{username,password}`。候选 username 必须是 1..64 字节 printable ASCII；
-Server 使用 Foundation 唯一规则 trim ASCII whitespace 并转 ASCII 小写，然后要求 canonical 值为
+Server 使用 xcss 唯一规则 trim ASCII whitespace 并转 ASCII 小写，然后要求 canonical 值为
 3..64 字节、首尾 `[a-z0-9]`、全部字符仅 `[a-z0-9._-]`，明确禁止 `@`，相邻分隔符允许。持久
 `_xcss_administrators.username` 只保存 canonical 值并具有 UNIQUE 约束。
 
-登录与 Session 查询只返回 Foundation 精确 `AdministratorSession`：`authenticated=true`、`user_id`、
+登录与 Session 查询只返回 xcss 精确 `AdministratorSession`：`authenticated=true`、`user_id`、
 `username`、`role=admin`、`csrf_token`，不得出现 email、权限数组或附加字段。`admin` 是默认 username；
 固定的是 `role=admin`，不是 username 只能叫 `admin`。产品没有 viewer/operator/RBAC。相同 pairing
 request 重放幂等，单设备最多保留四个 live pending 请求。
 
-Web 只创建一个 Foundation `AdministratorApiClient`，React 通过共享 hook 以 username 恢复/登录/登出并
+Web 只创建一个 xcss `AdministratorApiClient`，React 通过共享 hook 以 username 恢复/登录/登出并
 响应 401；Session 与 CSRF 仅保存在该 client 的内存闭包。产品代码负责 Host 与实例 API 的精确响应
 guard。当前页面提供实例创建、授权码查看/轮换、取消/删除、`/activate/{request_id}` 设备核对与激活、
 Host 列表、完整最新详情、备注/删除和历史趋势；audit 查询与导出仍未提供。
@@ -85,7 +85,7 @@ Host 列表、完整最新详情、备注/删除和历史趋势；audit 查询�
 writer 停止、总等待超时或写入失败返回 503；两者带 `Retry-After: 1`。客户端断开不会取消已经入队、
 归 writer 所有的工作。
 
-所有 `/api` 失败都输出 Foundation 当前 `ErrorEnvelope`。Client 只有在严格 JSON、正确 Content-Type、
+所有 `/api` 失败都输出 xcss 当前 `ErrorEnvelope`。Client 只有在严格 JSON、正确 Content-Type、
 状态码/机器码一致且 `retryable=false` 时才作永久 spool/凭据裁决：`401 + unauthorized` 进入重新授权，
 `403 + client_host_mismatch` 只永久丢弃该错误 Host 的报告。代理/WAF 的文本或非合同响应保持可重试，
 不得改变凭据。

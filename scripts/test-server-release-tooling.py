@@ -141,7 +141,7 @@ class ReleaseToolingTests(unittest.TestCase):
                     PACKAGE.require_release_host(system, machine, libc)
 
     def test_server_build_declares_supported_target_in_shared_pipeline(self) -> None:
-        config = json.loads((SCRIPT.parent.parent / "foundation-web-build.json").read_text())
+        config = json.loads((SCRIPT.parent.parent / "xcss-web-build.json").read_text())
         self.assertEqual(config["rust"]["package"], "xsos")
         self.assertEqual(config["rust"]["binary"], "xsos")
         self.assertEqual(config["rust"]["source_revision_env"], "XSOS_SOURCE_REVISION")

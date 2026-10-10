@@ -8,7 +8,7 @@
 
 ```sh
 npm --prefix web ci
-CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_BUILD_JOBS=2 web/node_modules/.bin/xcss-build-server --config foundation-web-build.json --mode development --no-install
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_BUILD_JOBS=2 web/node_modules/.bin/xcss-build-server --config xcss-web-build.json --mode development --no-install
 node scripts/local-service.mjs init
 node scripts/local-service.mjs start
 node scripts/local-service.mjs status
@@ -23,7 +23,7 @@ node scripts/local-service.mjs stop
 `.runtime/local-service/server.log`。所有运行状态由 Git 忽略，重复启动复用原有数据库和凭据。
 重新构建二进制前先停止本服务；默认使用内嵌的管理页面。
 
-Web 与 Server 使用 Foundation 同一构建入口。默认二进制自带管理页面；本地启动默认使用内嵌资源；执行 `node scripts/local-service.mjs start --directory-web` 显式选择开发目录 `web/dist`，修改后重新构建 Web 即生效，无需重编译 Rust。也可运行 Vite 开发服务器获得源码热更新。正式 source-bound 二进制拒绝目录资源模式。
+Web 与 Server 使用 xcss 同一构建入口。默认二进制自带管理页面；本地启动默认使用内嵌资源；执行 `node scripts/local-service.mjs start --directory-web` 显式选择开发目录 `web/dist`，修改后重新构建 Web 即生效，无需重编译 Rust。也可运行 Vite 开发服务器获得源码热更新。正式 source-bound 二进制拒绝目录资源模式。
 
 构建产物默认位于 `target/x86_64-unknown-linux-gnu/debug/`。若设置自定义 `CARGO_TARGET_DIR`，启动/状态/停止时使用 `XCSS_LOCAL_SERVER_BINARY` 指定同一绝对二进制路径。
 

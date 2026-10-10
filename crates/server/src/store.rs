@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use rand::TryRng;
 use sqlx::{Acquire, Connection, FromRow, Row, Sqlite, SqlitePool, Transaction, types::Json};
 use uuid::Uuid;
-use xcss_admin_core::AdministratorStore;
+use xcss::admin_core::AdministratorStore;
 use xsos_protocol::{
     Capability, ClientPairingMode, ClientPairingRequest, ClientReport, PairingStatus,
 };
@@ -51,7 +51,7 @@ pub async fn retention_ready(pool: &SqlitePool) -> bool {
 }
 
 pub fn normalize_username(username: &str) -> anyhow::Result<String> {
-    xcss_admin_auth::normalize_administrator_username(username).map_err(anyhow::Error::from)
+    xcss::admin_auth::normalize_administrator_username(username).map_err(anyhow::Error::from)
 }
 
 pub async fn ensure_admin_user(
@@ -59,8 +59,8 @@ pub async fn ensure_admin_user(
     username: &str,
     password: Option<&str>,
 ) -> anyhow::Result<()> {
-    let store = xcss_admin_sqlite::SqliteAdministratorStore::new(pool.clone());
-    let service = xcss_admin_core::AdministratorService::new(store);
+    let store = xcss::admin_sqlite::SqliteAdministratorStore::new(pool.clone());
+    let service = xcss::admin_core::AdministratorService::new(store);
     if service.store().administrator_count().await? == 0 {
         let password = password.ok_or_else(|| {
             anyhow::anyhow!(
@@ -80,9 +80,9 @@ pub async fn reset_admin_password(
     username: &str,
     password: &str,
 ) -> anyhow::Result<()> {
-    let store = xcss_admin_sqlite::SqliteAdministratorStore::new(pool.clone());
+    let store = xcss::admin_sqlite::SqliteAdministratorStore::new(pool.clone());
     store.validate_all_administrators().await?;
-    xcss_admin_core::AdministratorService::new(store)
+    xcss::admin_core::AdministratorService::new(store)
         .change_administrator_password(username, password, now_micros()?)
         .await
         .map_err(anyhow::Error::from)
@@ -90,7 +90,7 @@ pub async fn reset_admin_password(
 
 /// Startup validates the current administrator state and never bootstraps it.
 pub async fn require_administrator(pool: &SqlitePool) -> anyhow::Result<()> {
-    let store = xcss_admin_sqlite::SqliteAdministratorStore::new(pool.clone());
+    let store = xcss::admin_sqlite::SqliteAdministratorStore::new(pool.clone());
     anyhow::ensure!(
         store.administrator_count().await? > 0,
         "service is not initialized; run init to create the first administrator"

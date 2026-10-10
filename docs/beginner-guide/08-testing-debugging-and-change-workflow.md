@@ -52,10 +52,10 @@ npm run build
 redaction、TLS 证书/主机名验证、redirect 拒绝、默认远程 HTTP 拒绝与持久明文开关，以及安装脚本路径
 替换。安全负例必须与功能正例同等重要。
 
-管理员合同变更还要跨 Rust DTO、Foundation TS guard/JSON Schema、Host SQLite DDL/Schema SHA、登录
+管理员合同变更还要跨 Rust DTO、xcss TS guard/JSON Schema、Host SQLite DDL/Schema SHA、登录
 限流 key、Session response、CLI/env 和 React 表单做全文闭包检查。当前正例应覆盖 ` Admin ` 规范化为
 `admin`；负例覆盖 `@`、内部空格、首尾分隔符、非 ASCII、control、过短/过长、额外 JSON 字段和非
-`admin` role。Host Server/Web 中不应出现 email 字段或兼容 alias。
+`admin` role。xsos/Web 中不应出现 email 字段或兼容 alias。
 
 ## 8.7 版本与名称变更
 

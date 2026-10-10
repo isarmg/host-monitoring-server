@@ -8,7 +8,7 @@ use http_body_util::BodyExt;
 use sqlx::SqlitePool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use xcss_error::ErrorEnvelope;
+use xcss::error::ErrorEnvelope;
 use xsos::{
     http::{AppState, router},
     store,
@@ -36,7 +36,7 @@ async fn fixture() -> Fixture {
         .expect("initialize current test schema");
     let (state, telemetry_writer) = AppState::with_telemetry_config(
         pool.clone(),
-        xcss_admin_auth::AdministratorOriginMode::LoopbackDevelopmentHttp,
+        xcss::admin_auth::AdministratorOriginMode::LoopbackDevelopmentHttp,
         TelemetryWriterConfig::production(),
         xsos::crypto::SecretBox::new([0x42; 32]),
     );
@@ -139,7 +139,7 @@ async fn response_contract(response: Response<Body>) -> (StatusCode, String, Vec
         .to_bytes()
         .to_vec();
     let envelope =
-        serde_json::from_slice::<ErrorEnvelope>(&body).expect("strict Foundation error envelope");
+        serde_json::from_slice::<ErrorEnvelope>(&body).expect("strict xcss error envelope");
     assert_eq!(
         envelope.request_id.as_ref().map(|value| value.as_str()),
         Some(request_id.as_str())

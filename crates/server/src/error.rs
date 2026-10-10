@@ -3,7 +3,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use xcss_error::{ErrorCode, ErrorEnvelope, HttpStatus};
+use xcss::error::{ErrorCode, ErrorEnvelope, HttpStatus};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -54,10 +54,10 @@ pub enum Error {
 }
 
 /// Marks responses which have already been serialized with the current
-/// Foundation error contract. The outer API middleware uses this marker to
+/// xcss error contract. The outer API middleware uses this marker to
 /// replace Axum extractor/route rejections without rewriting product errors.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct FoundationErrorEnvelope;
+pub(crate) struct XcssErrorEnvelope;
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
@@ -139,7 +139,7 @@ impl IntoResponse for Error {
             envelope = envelope.with_detail("request_id", request_id.to_string());
         }
         let mut response = (status, Json(envelope)).into_response();
-        response.extensions_mut().insert(FoundationErrorEnvelope);
+        response.extensions_mut().insert(XcssErrorEnvelope);
         if let Some(retry_after) = retry_after {
             response.headers_mut().insert(
                 header::RETRY_AFTER,
@@ -180,12 +180,7 @@ mod tests {
     async fn errors_use_the_strict_foundation_envelope() {
         let response = Error::ClientHostMismatch.into_response();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        assert!(
-            response
-                .extensions()
-                .get::<FoundationErrorEnvelope>()
-                .is_some()
-        );
+        assert!(response.extensions().get::<XcssErrorEnvelope>().is_some());
         let body = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
         assert_eq!(
             serde_json::from_slice::<serde_json::Value>(&body).unwrap(),

@@ -83,7 +83,7 @@ fn assert_snapshot_unchanged(before: &[(String, Vec<u8>)], after: &[(String, Vec
 
 fn mutate_checkpoint_and_seed_sidecar_sentinels(path: &Path, sql: &str) {
     use sqlx::Connection as _;
-    xcss_sqlite::block_on_sqlite_connection(async {
+    xcss::sqlite::block_on_sqlite_connection(async {
         let mut connection = sqlx::SqliteConnection::connect_with(
             &sqlx::sqlite::SqliteConnectOptions::new()
                 .filename(path)
@@ -150,7 +150,7 @@ async fn exact_current_schema_survives_close_and_reopen() {
         )
     );
     let platform_metadata =
-        xcss_platform_db::require_current_platform_metadata(&pool, "server-control-plane")
+        xcss::platform_db::require_current_platform_metadata(&pool, "server-control-plane")
             .await
             .expect("read the exact current platform metadata");
     assert_eq!(platform_metadata.profile, "server-control-plane");

@@ -9,7 +9,7 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use xcss_config::{ConfigSource, EnvMapping, EnvValueKind, Override};
+use xcss::config::{ConfigSource, EnvMapping, EnvValueKind, Override};
 
 use crate::retention::{
     DEFAULT_AGGREGATE_RETENTION_DAYS, DEFAULT_MAINTENANCE_INTERVAL_SECONDS,
@@ -17,11 +17,11 @@ use crate::retention::{
     DEFAULT_RETENTION_TRANSACTIONS, DEFAULT_RETENTION_YIELD_MILLISECONDS, RetentionConfig,
 };
 use crate::telemetry::TelemetryWriterConfig;
-use xcss_admin_auth::AdministratorOriginMode;
+use xcss::admin_auth::AdministratorOriginMode;
 
 #[derive(Debug, Parser)]
 #[command(name = "xsos", version,
-    long_version = concat!(env!("CARGO_PKG_VERSION"), " source=", env!("XSOS_SOURCE_REVISION"), " foundation=", env!("XCSS_FOUNDATION_REVISION")), about)]
+    long_version = concat!(env!("CARGO_PKG_VERSION"), " source=", env!("XSOS_SOURCE_REVISION"), " xcss=", env!("XCSS_REVISION")), about)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -110,9 +110,9 @@ impl ValidatedConfig {
         let config = config.map(normalize_config_path).transpose()?;
         let file = config
             .as_deref()
-            .map(xcss_config::read_private_file)
+            .map(xcss::config::read_private_file)
             .transpose()?;
-        let environment = xcss_config::read_environment(&ENVIRONMENT, |name| env::var(name).ok())?;
+        let environment = xcss::config::read_environment(&ENVIRONMENT, |name| env::var(name).ok())?;
         let mut command_line = Vec::new();
         if let Some(path) = data_dir {
             command_line.push(Override::new(
@@ -123,7 +123,7 @@ impl ValidatedConfig {
         if let Some(bind) = bind {
             command_line.push(Override::new("/bind", bind.to_string()));
         }
-        let loaded = xcss_config::resolve_validated(
+        let loaded = xcss::config::resolve_validated(
             &Settings::default(),
             file.as_deref(),
             &environment,
@@ -164,7 +164,7 @@ impl ValidatedConfig {
             settings.development,
         )?;
         let bootstrap_admin_username =
-            xcss_admin_auth::normalize_administrator_username(&settings.bootstrap_admin_username)?;
+            xcss::admin_auth::normalize_administrator_username(&settings.bootstrap_admin_username)?;
         let telemetry = TelemetryWriterConfig::new(
             settings.telemetry_queue_capacity,
             settings.telemetry_batch_size,
@@ -398,7 +398,7 @@ fn validate_static_dir(value: &str, production: bool) -> anyhow::Result<PathBuf>
         root.is_absolute(),
         "development Web directory must be absolute"
     );
-    xcss_web_assets::DirectoryAssets::new(root)?;
+    xcss::web_assets::DirectoryAssets::new(root)?;
     anyhow::ensure!(
         root.join("index.html").is_file() && root.join("assets").is_dir(),
         "development Web directory must contain index.html and assets"
@@ -465,11 +465,11 @@ mod tests {
     #[test]
     fn administrator_username_uses_the_foundation_canonical_form() {
         assert_eq!(
-            xcss_admin_auth::normalize_administrator_username("  Release.Admin  ").unwrap(),
+            xcss::admin_auth::normalize_administrator_username("  Release.Admin  ").unwrap(),
             "release.admin"
         );
         for rejected in ["ab", "admin@example.test", "管理员", "admin\n"] {
-            assert!(xcss_admin_auth::normalize_administrator_username(rejected).is_err());
+            assert!(xcss::admin_auth::normalize_administrator_username(rejected).is_err());
         }
     }
 
@@ -523,9 +523,9 @@ mod tests {
 fn validate_intrinsic(
     settings: &Settings,
     source: ConfigSource,
-) -> Result<(), xcss_config::ConfigError> {
+) -> Result<(), xcss::config::ConfigError> {
     let invalid =
-        |path| xcss_config::ConfigError::new(xcss_config::Reason::InvalidValue, path, source);
+        |path| xcss::config::ConfigError::new(xcss::config::Reason::InvalidValue, path, source);
     settings
         .bind
         .parse::<SocketAddr>()
@@ -539,10 +539,10 @@ fn validate_intrinsic(
     {
         return Err(invalid("/client_authorization_key"));
     }
-    xcss_admin_auth::normalize_administrator_username(&settings.bootstrap_admin_username)
+    xcss::admin_auth::normalize_administrator_username(&settings.bootstrap_admin_username)
         .map_err(|_| invalid("/bootstrap_admin_username"))?;
     if let Some(password) = &settings.bootstrap_admin_password {
-        xcss_admin_auth::validate_password(password)
+        xcss::admin_auth::validate_password(password)
             .map_err(|_| invalid("/bootstrap_admin_password"))?;
     }
     if settings
@@ -643,7 +643,7 @@ mod precedence_contract_tests {
     #[test]
     fn a_higher_priority_override_cannot_hide_an_invalid_file_value() {
         let file = serde_json::to_vec(&serde_json::json!({"telemetry_queue_capacity":0})).unwrap();
-        let error = xcss_config::resolve_validated(
+        let error = xcss::config::resolve_validated(
             &Settings::default(),
             Some(&file),
             &[],

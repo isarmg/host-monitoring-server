@@ -1,13 +1,13 @@
-import { t } from "@xcss/admin-ui/i18n";
-import { errorRequestId, useAdminApplication } from "@xcss/admin-shell";
-import { Button, EmptyState, ErrorState, LoadingState, Table } from "@xcss/admin-ui";
+import { t } from "@xcss/web/admin-ui/i18n";
+import { errorRequestId, useAdminApplication } from "@xcss/web/admin-shell";
+import { Button, EmptyState, ErrorState, LoadingState, Table } from "@xcss/web/admin-ui";
 import { useEffect, useState } from "react";
 import {
   CURRENT_API_PREFIX, isReportLogCalendar, isReportLogsResponse,
   LIST_REQUEST_BUDGET, type Host, type ReportLogsResponse,
 } from "./api";
-import { DateRangeField, type CalendarDateRange } from "@xcss/admin-ui/date-range";
-import "@xcss/admin-ui/date-range.css";
+import { DateRangeField, type CalendarDateRange } from "@xcss/web/admin-ui/date-range";
+import "@xcss/web/admin-ui/date-range.css";
 import { PageNavigation } from "./PageNavigation";
 
 export function HostLogs({ host, refreshSignal }: { host: Host; refreshSignal: number }) {

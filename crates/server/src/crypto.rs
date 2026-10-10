@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use xcss_secret::{SecretBytes, SecretKey};
-use xcss_secret_envelope::EnvelopeDomain;
+use xcss::secret::{SecretBytes, SecretKey};
+use xcss::secret_envelope::EnvelopeDomain;
 
 struct ClientAuthorizationEnvelope;
 
@@ -19,7 +19,7 @@ impl SecretBox {
     }
 
     pub fn encrypt(&self, instance_id: uuid::Uuid, value: &str) -> anyhow::Result<Vec<u8>> {
-        Ok(xcss_secret_envelope::seal::<ClientAuthorizationEnvelope>(
+        Ok(xcss::secret_envelope::seal::<ClientAuthorizationEnvelope>(
             &self.0,
             instance_id.as_bytes(),
             &SecretBytes::new(value.as_bytes().to_vec()),
@@ -31,7 +31,7 @@ impl SecretBox {
             (64..=1024).contains(&value.len()),
             "client authorization envelope has an invalid size"
         );
-        let plaintext = xcss_secret_envelope::open::<ClientAuthorizationEnvelope>(
+        let plaintext = xcss::secret_envelope::open::<ClientAuthorizationEnvelope>(
             &self.0,
             instance_id.as_bytes(),
             value,

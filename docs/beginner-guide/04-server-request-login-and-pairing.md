@@ -18,21 +18,21 @@ TCP peer + bounded body
  -> 生产 `__Host-` Secure/HttpOnly Cookie + 响应内 CSRF plaintext
 ```
 
-登录候选 username 为 1..64 字节 printable ASCII。Foundation primitive 先 trim ASCII whitespace、转
+登录候选 username 为 1..64 字节 printable ASCII。xcss primitive 先 trim ASCII whitespace、转
 ASCII 小写，再要求持久 canonical username 为 3..64 字节，首尾 `[a-z0-9]`，所有字符只允许
 `[a-z0-9._-]`，禁止 `@`，但不禁止相邻分隔符。默认 username 是 `admin`。账户 bucket 使用规范化值，
 因此 ` Admin ` 与 `admin` 共享同一预算和唯一数据库行。
 
 密码 wire candidate 上限为 1024 字节，真正验证前还必须满足当前 12..1024 字节、无 ASCII control 的
-Foundation 密码策略。未知账户仍执行固定 current-policy dummy hash，降低用户名枚举侧信道；全局
+xcss 密码策略。未知账户仍执行固定 current-policy dummy hash，降低用户名枚举侧信道；全局
 Argon2 semaphore 防止无界 CPU 并发。写请求同时验证 Session、CSRF、Origin/Host/Sec-Fetch-Site；
 forwarded address 默认不是可信来源事实。
 
-登录和 Session 查询响应固定为 Foundation `AdministratorSession` 精确五字段：
+登录和 Session 查询响应固定为 xcss `AdministratorSession` 精确五字段：
 `authenticated=true`、`user_id`、`username`、`role=admin`、`csrf_token`。不存在 email、权限数组或额外
 角色字段；本产品没有 viewer/operator/RBAC。
 Web 的恢复/登录/登出、401 清理与内存 Session/CSRF 状态统一由
-`@xcss/admin-web` client/hook 负责；页面和 Host API 响应 guard 仍在产品仓库。
+`@xcss/web/admin-web` client/hook 负责；页面和 Host API 响应 guard 仍在产品仓库。
 
 ## 4.3 配对的参与者
 
@@ -88,7 +88,7 @@ Client 状态仍包含 `denied`，数据库清理 SQL 也识别它，但当前 S
 - `429`：准入容量不足，遵循 `Retry-After`。
 - `503`：writer 或依赖不可用，保留同一报告后重试。
 
-所有 `/api` 失败都使用 Foundation 严格顶层 `{code,message,retryable,request_id?,details?}`；未知字段、
+所有 `/api` 失败都使用 xcss 严格顶层 `{code,message,retryable,request_id?,details?}`；未知字段、
 缺字段、错误 Content-Type 或代理生成的 HTML 都不是可信机器合同。Web 与 Client 按 `code` 分支，
 `message` 只用于展示和受限诊断。
 

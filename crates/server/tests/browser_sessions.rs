@@ -8,8 +8,8 @@ use http_body_util::BodyExt;
 use serde_json::json;
 use sqlx::SqlitePool;
 use tower::ServiceExt;
-use xcss_admin_auth::{AdministratorOriginMode, CSRF_HEADER};
-use xcss_contracts::AdministratorSession;
+use xcss::admin_auth::{AdministratorOriginMode, CSRF_HEADER};
+use xcss::contracts::AdministratorSession;
 use xsos::{
     http::{AppState, router},
     store,
@@ -53,7 +53,7 @@ fn request(method: Method, uri: &str, cookie: Option<&str>, csrf: Option<&str>) 
         .uri(uri)
         .header(header::HOST, "127.0.0.1")
         .header(header::ORIGIN, "http://127.0.0.1")
-        .header(xcss_admin_auth::SEC_FETCH_SITE_HEADER, "same-origin");
+        .header(xcss::admin_auth::SEC_FETCH_SITE_HEADER, "same-origin");
     if let Some(value) = cookie {
         builder = builder.header(header::COOKIE, value);
     }
@@ -76,7 +76,7 @@ fn request(method: Method, uri: &str, cookie: Option<&str>, csrf: Option<&str>) 
 }
 
 #[tokio::test]
-async fn foundation_login_session_csrf_and_logout_are_used_end_to_end() {
+async fn xcss_login_session_csrf_and_logout_are_used_end_to_end() {
     let fixture = fixture().await;
     let login = fixture
         .app
@@ -130,8 +130,7 @@ async fn foundation_login_session_csrf_and_logout_are_used_end_to_end() {
         .await
         .expect("body")
         .to_bytes();
-    let error: xcss_contracts::ErrorEnvelope =
-        serde_json::from_slice(&body).expect("Foundation error");
+    let error: xcss::contracts::ErrorEnvelope = serde_json::from_slice(&body).expect("xcss error");
     assert_eq!(error.code.as_str(), "auth.csrf_rejected");
     let rejected = fixture
         .app

@@ -12,7 +12,7 @@ Windows 和 macOS 只可能属于 Client 交付，不得部署 `xsos`。
 /run/isarmg/xsos/                 systemd runtime
 ```
 
-systemd 以 `ixcss-host` 运行：
+systemd 以 `xsos` 运行：
 
 ```text
 ExecStart=/opt/isarmg/xsos/current/bin/xsos \
@@ -36,12 +36,12 @@ manifest、生成 deterministic archive/checksum，随后解包、重定位、�
 篡改拒绝。已有归档或 checksum 不会被覆盖。`build.rs` 还会拒绝非目标编译，二进制在读取配置、打开
 SQLite 或监听端口前通过 `uname` 再确认 Linux/x86_64；三层检查均为 fail-closed。
 
-当前 Server Rust 固定 Foundation 1.0.0 / `d58b9ef0822984ee0d29fb8b8139cfd2787374fb`，八个 Web 包使用
-同版 Release tarball 与准确 SHA-512 integrity，无相邻 Foundation 路径依赖。本轮使用封存的本地候选 Git 对象和真实 tarball 验证；远端发布与独立 CI 仍须以当前精确提交的正式证据核对，
-见[消费者矩阵](https://github.com/isarmg/xcss/blob/main/consumers/consumer-matrix.json)。Client Foundation 是另一个独立上游，其版本不随 Server 包改写。
+当前 Server Rust 固定 xcss 1.0.0 / `9fb5b3f8f20762cb93050bc52ea81a36ac0dc914`，一个 @xcss/web 包使用
+同版 Release tarball 与准确 SHA-512 integrity，无相邻 xcss 路径依赖。本轮使用封存的本地候选 Git 对象和真实 tarball 验证；远端发布与独立 CI 仍须以当前精确提交的正式证据核对，
+见[消费者矩阵](https://github.com/isarmg/xcss/blob/main/consumers/consumer-matrix.json)。xcsc 是另一个独立上游，其版本不随 Server 包改写。
 React/Vite/TypeScript 基线与配置由 web-toolchain 维护；登录、Session、退出、主题和全局错误由共享 Shell 维护。
 独立构建通过不等于当前主分支改动已进入产品 Release；发行仍须核对精确 tag、源码和全部门禁，不改写旧资产。
-Foundation 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
+xcss 变更必须显式发布新版本并替换当前合同，同时通过 Host 的 Rust 全矩阵、Web clean build、
 SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同。
 
 当前 React 管理台以实例列表和实例详情为主线：列表提供完整实例集合、同页监控摘要、长期授权码和
@@ -53,7 +53,7 @@ SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同�
 
 ## 3. Server 配置
 
-所有变量使用 `XSOS_` 前缀。核心项：
+产品运行参数使用 `XSOS_` 前缀。下表的普通变量名省略此前缀；`XSOC_AUTHORIZATION_KEY` 和共享开发变量 `XCSS_DEV_WEB_DIR` 列出完整名称，按原样使用。
 
 | 变量 | 默认/要求 | 说明 |
 |---|---|---|
@@ -61,9 +61,9 @@ SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同�
 | `BIND` | `127.0.0.1:18105` | 非开发模式必须保持安全部署边界 |
 | `XCSS_DEV_WEB_DIR` | 开发可选 | 仅未绑定开发构建可选目录热更新；正式 Web 嵌入可执行文件，不允许目录覆盖 |
 | `DEVELOPMENT` | `false` | 仅本机开发可开启 |
-| `BOOTSTRAP_ADMIN_USERNAME` | `admin` | 仅在显式 `init` 为全新实例创建首个管理员；按 Foundation 规则规范化，不是 email，也没有旧变量别名 |
-| `BOOTSTRAP_ADMIN_PASSWORD` | 仅显式 `init` 必填 | 12..1024 字节且无 ASCII control；创建后保存 Foundation 当前 Argon2id hash，不保存明文 |
-| `CLIENT_AUTHORIZATION_KEY` | 必填 | 标准 Base64 编码的 32 个随机字节；生成一次并持久保存，用于加密每实例长期授权码 |
+| `BOOTSTRAP_ADMIN_USERNAME` | `admin` | 仅在显式 `init` 为全新实例创建首个管理员；按 xcss 规则规范化，不是 email，也没有旧变量别名 |
+| `BOOTSTRAP_ADMIN_PASSWORD` | 仅显式 `init` 必填 | 12..1024 字节且无 ASCII control；创建后保存 xcss 当前 Argon2id hash，不保存明文 |
+| `XSOC_AUTHORIZATION_KEY`（完整名称） | 必填 | 标准 Base64 编码的 32 个随机字节；生成一次并持久保存，用于加密每实例长期授权码；这是服务端保存的客户端实例授权码密钥 |
 | `TELEMETRY_QUEUE_CAPACITY` | 256，最大 1024 | 内存报告队列 |
 | `TELEMETRY_BATCH_SIZE` | 64，范围 1..min(512, queue) | 单事务候选报告数 |
 | `TELEMETRY_FLUSH_MILLISECONDS` | 25，范围 1..1000 | 低流量 batch 最长聚合等待 |
@@ -78,7 +78,7 @@ SQLite reopen 与 Router→Client 合同测试，使用当前严格响应合同�
 | `RETENTION_MAX_RUN_MILLISECONDS` | 2000，范围 100..10000 | 单轮时间预算，并且必须短于 maintenance interval |
 | `RETENTION_YIELD_MILLISECONDS` | 10，范围 1..100 | 相邻维护事务之间主动让出执行权的时间 |
 
-变量名在进程环境中必须带完整 `XSOS_` 前缀；表中为去前缀后的可读写法。程序只读取环境，
+例如表中的 `DATABASE_URL` 对应 `XSOS_DATABASE_URL`，而 `XSOC_AUTHORIZATION_KEY` 和 `XCSS_DEV_WEB_DIR` 不再追加 `XSOS_`。程序只读取环境，
 不会解析 `/etc/isarmg/xsos.env` 文件；该路径是 systemd unit 的部署合同。未知环境变量不会被
 Server 拒绝，因此应通过配置管理审查拼写，不能把“进程能启动”当作未知变量已生效。
 
@@ -116,14 +116,14 @@ Server 自身只监听 HTTP socket；正式 HTTPS、证书与外部连接限制�
 | `POST /api/v1/xsoc/report` | `Bearer <client credential>` | 512 KiB；单份 strict report；每 Host 速率桶 | 持久事务提交后才返回 `202`；同 Host 同 ID 重放 `accepted=false` |
 
 登录与管理写操作的同源裁决会把所有原始 `Origin`、`Host`/HTTP/2 authority、`Sec-Fetch-Site` 值交给
-Foundation；重复、冲突或非当前形状 fail closed。生产 Cookie 名是 `__Host-xcss-xsos-session`，带
+xcss；重复、冲突或非当前形状 fail closed。生产 Cookie 名是 `__Host-xcss-xsos-session`，带
 `Path=/; Secure; HttpOnly; SameSite=Strict` 且没有 Domain；开发模式改用非 Secure 的 `xcss-xsos-session`，但
 配置层强制监听 loopback。Session token 和 CSRF token 都是 32-byte 随机值，只以 SHA-256 摘要入库；
 Session 同时受 idle/absolute TTL、账户 active 与 `session_version` 约束，每个 Session 只保留当前
 CSRF 摘要；恢复会话时轮换，不保留旧 token 的兼容窗口。
 
 所有 `/api` 的 4xx/5xx（包括 JSON extractor、body 过大、方法错误与未知 API 路径）都会规范为
-Foundation `ErrorEnvelope`；健康端点和静态文件不在这个 envelope 范围。当前仅部分敏感成功响应显式
+xcss `ErrorEnvelope`；健康端点和静态文件不在这个 envelope 范围。当前仅部分敏感成功响应显式
 设置 `Cache-Control: no-store`，不能把它扩大解释为所有管理 GET 都由 Server 响应头禁止缓存。
 
 ### 3.2 数据库锁矩阵
@@ -160,7 +160,7 @@ printf '%s\n' "$NEW_ADMIN_PASSWORD" | xsos admin-reset-password \
 ```
 
 `init` 从当前配置中的 bootstrap username/password 创建首个账户，只接受全新私有空目录；已有库或账户不会被覆盖。普通 `run` 只验证当前状态，不创建管理员。`admin-reset-password` 接受 `--username`，从标准输入读取一行有界密码，先规范化 username，再写新的当前
-Argon2id hash；Foundation SQLite 更新事务同时提升 `session_version` 并撤销该账户全部 Session。
+Argon2id hash；xcss SQLite 更新事务同时提升 `session_version` 并撤销该账户全部 Session。
 `doctor` 和管理员密码重置要求 maintenance 排他锁，因此应先停止运行实例。
 
 reset CLI 不从 argv 读取密码。不要把真实密码字面量写进可持久 Shell history、脚本、工单或日志。首次创建
@@ -168,7 +168,7 @@ reset CLI 不从 argv 读取密码。不要把真实密码字面量写进可持�
 
 ## 5. Client 配置与诊断
 
-Client 配置、命令、网络行为和 Foundation 依赖由独立 Client 仓库维护，见
+Client 配置、命令、网络行为和 xcss 依赖由独立 Client 仓库维护，见
 [配置与诊断](https://github.com/isarmg/xsoc/blob/main/docs/configuration.md)。
 Client 的产品 transport 使用 reqwest；HTTPS、响应读取和协议分类规则以该仓库的实现和测试为准。
 只读诊断与实际投递检查是不同操作，执行命令前按所安装 Client 的版本文档确认其副作用。
@@ -197,12 +197,12 @@ Server 仅在显式 `init` 创建当前库。`product_metadata` 必须精确绑�
 schema revision `1` 与 SHA-256
 `3dcffe26f698fbacbc386a1e35dbc9d4f38f516e56115549709703d09987a40d`；软件补丁版本由发行身份中的 `version` 独立表达，现场 `sqlite_schema` 重新计算也
 必须一致。当前 DDL 中管理员列是 `_xcss_administrators.username`，没有 `email` 或 role 列；DDL 自身约束 canonical
-username、非空 password hash、`active IN (0,1)`，`run`/`config validate` 加载已有行时再用 Foundation
+username、非空 password hash、`active IN (0,1)`，`run`/`config validate` 加载已有行时再用 xcss
 primitive 验证 username 和完整 current Argon2id 参数；DDL 还要求 `session_version > 0`，形成存储形状与
 密码策略双层 fail-closed。数据库/
 父目录/锁的
 链接、特殊文件和硬链接
-别名在 Linux 通过 `openat2` 锚定检查。`doctor` 还通过 Foundation 适配器执行完整
+别名在 Linux 通过 `openat2` 锚定检查。`doctor` 还通过 xcss 适配器执行完整
 `PRAGMA integrity_check` 与 `foreign_key_check`；失败只报告 degraded 并退出，不在产品内修库。
 
 

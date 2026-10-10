@@ -20,7 +20,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Reject the retired gateway/repository identities, not current Foundation
+          # Reject the retired gateway/repository identities, not current xcss
           # packages such as xcss-platform-db.
           if git grep -n -P \
               'UNION_|X-Union-|[Uu]nion[Cc]|PluginManifest|ProcessContext|xcss-platform-gateway|xcss_platform_gateway|github\.com/isarmg/xcss-platform(?:\.git)?' \

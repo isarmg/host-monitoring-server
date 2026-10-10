@@ -14,7 +14,7 @@ xsos-1.0.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 
 - Server 唯一支持 **x86_64 GNU/Linux（AMD64 + glibc）**，target 固定为
   `x86_64-unknown-linux-gnu`。ARM、musl、Windows 和 macOS 不支持运行 Server。
-- 正式服务由 systemd 管理，以专用非 root 账户 `ixcss-host` 运行。
+- 正式服务由 systemd 管理，以专用非 root 账户 `xsos` 运行。
 - 每个版本都是全新、精确的当前合同。本发行不读取旧 Schema、旧字段、旧路径、旧身份或旧发行别名，
   也不提供兼容 fallback。
 - 主机报告仅接受 **schema 1**，必须同步更新 Client。新增清单包含内存模块及雷电/USB4、显示器、
@@ -135,7 +135,7 @@ sudo /opt/isarmg/xsos/releases/1.0.0/bin/xsos \
   verify-release --root /opt/isarmg/xsos/releases/1.0.0
 ```
 
-不要给 `ixcss-host`、其他 group 或 world 发行树写权限。生产静态目录检查还会拒绝由服务账户拥有的
+不要给 `xsos`、其他 group 或 world 发行树写权限。生产静态目录检查还会拒绝由服务账户拥有的
 Web 文件。
 
 ## 6. 创建专用服务账户
@@ -143,22 +143,22 @@ Web 文件。
 全新主机创建固定组和不可登录账户：
 
 ```bash
-sudo groupadd --system ixcss-host
+sudo groupadd --system xsos
 sudo useradd --system \
-  --gid ixcss-host \
+  --gid xsos \
   --home-dir /var/lib/isarmg/xsos \
   --no-create-home \
   --shell /usr/sbin/nologin \
-  ixcss-host
+  xsos
 ```
 
-若名称已存在，不可直接忽略命令失败。必须确认账户不是 root、primary group 精确为 `ixcss-host`、home
+若名称已存在，不可直接忽略命令失败。必须确认账户不是 root、primary group 精确为 `xsos`、home
 精确为 `/var/lib/isarmg/xsos`、shell 为系统 `nologin`，且该身份确由本部署管理：
 
 ```bash
-getent group ixcss-host
-getent passwd ixcss-host
-id ixcss-host
+getent group xsos
+getent passwd xsos
+id xsos
 ```
 
 不要复用普通用户、登录账户、Web 管理员或 Client 身份。
@@ -259,7 +259,7 @@ Server 与 React 管理 Web 只保留 `admin` role；不存在 viewer、operator
 ```bash
 sudo test ! -e /opt/isarmg/xsos/current
 sudo ln -sT /opt/isarmg/xsos/releases/1.0.0 /opt/isarmg/xsos/current
-sudo systemd-run --wait --collect -p User=ixcss-host -p Group=ixcss-host \
+sudo systemd-run --wait --collect -p User=xsos -p Group=xsos \
   -p EnvironmentFile=/etc/isarmg/xsos.env \
   /opt/isarmg/xsos/releases/1.0.0/bin/xsos init
 ```
@@ -280,7 +280,7 @@ sudo systemctl daemon-reload
 unit 的关键边界包括：
 
 - `ConditionArchitecture=x86-64`；
-- `User=ixcss-host`、`Group=ixcss-host`、`UMask=0077`；
+- `User=xsos`、`Group=xsos`、`UMask=0077`；
 - `StateDirectory=isarmg/xsos/db`、`RuntimeDirectory=isarmg/xsos`；
 - 固定 `current/bin/xsos run --release-root /opt/isarmg/xsos/current`；
 - `ProtectSystem=strict`、`ProtectHome=true`、`NoNewPrivileges=true`、空 capability；
@@ -442,7 +442,7 @@ TCP peer 限流。不要添加邮箱候选、旧用户名 fallback 或第二 rol
 - [ ] 归档只有 `1.0.0` 顶层目录，identity 和 `verify-release` 通过。
 - [ ] 发行位于固定版本目录，不存在可变别名或链接父链。
 - [ ] 发行树 root 所有、只读，服务账户不能写。
-- [ ] `ixcss-host` 是独立非 root、nologin 账户，group/home 精确。
+- [ ] `xsos` 是独立非 root、nologin 账户，group/home 精确。
 - [ ] 配置 root 所有、`0600`，所有参数已复核。
 - [ ] 初始 username canonical，密码是独立长随机秘密。
 - [ ] unit 与发行包一致，`systemd-analyze verify` 通过。

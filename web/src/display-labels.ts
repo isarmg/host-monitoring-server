@@ -1,4 +1,4 @@
-import { t } from "@xcss/admin-ui/i18n";
+import { t } from "@xcss/web/admin-ui/i18n";
 const labels: Record<string, readonly [string, string]> = {
   "hardware.memory": ["内存模块识别", "Memory module inventory"], "hardware.thunderbolt": ["雷电 / USB4 识别", "Thunderbolt / USB4 inventory"],
   "hardware.monitors": ["显示器识别", "Monitor inventory"], "hardware.bluetooth": ["蓝牙识别", "Bluetooth inventory"],

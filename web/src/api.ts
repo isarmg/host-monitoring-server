@@ -1,6 +1,6 @@
-import { createAdministratorApiClient } from "@xcss/admin-web";
-import { isErrorEnvelope, type ErrorEnvelope } from "@xcss/contracts";
-import { isApiClientError } from "@xcss/http-client";
+import { createAdministratorApiClient } from "@xcss/web/admin-web";
+import { isErrorEnvelope, type ErrorEnvelope } from "@xcss/web/contracts";
+import { isApiClientError } from "@xcss/web/http-client";
 
 export const CURRENT_API_PREFIX = "/api/v1";
 export const LIST_PAGE_SIZE = 50;
@@ -10,7 +10,7 @@ const isCursor = (value: unknown): value is string | null => value === null
   || (typeof value === "string" && /^[A-Za-z0-9_-]{1,512}$/.test(value));
 const hasPageCursors = (value: Record<string, unknown>) => isCursor(value.next_cursor) && isCursor(value.previous_cursor);
 
-// Foundation owns administrator Session, Cookie, persistence and CSRF policy.
+// xcss owns administrator Session, Cookie, persistence and CSRF policy.
 export const administratorApi = createAdministratorApiClient({
   baseUrl: globalThis.location.href,
 });
@@ -408,7 +408,7 @@ function isUtcTimestamp(value: unknown): value is string {
   );
 }
 
-// Exposes only the validated current Foundation envelope. Callers must branch
+// Exposes only the validated current xcss envelope. Callers must branch
 // on `code`, never on localized/display `message` text.
 export function errorEnvelope(error: unknown): ErrorEnvelope | undefined {
   if (!isApiClientError(error) || !isErrorEnvelope(error.envelope)) return undefined;

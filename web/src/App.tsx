@@ -1,12 +1,12 @@
-import { t } from "@xcss/admin-ui/i18n";
-import { createXcssAdminApplication, errorRequestId, useAdminApplication } from "@xcss/admin-shell";
-import { EmptyState, ErrorState, LoadingState } from "@xcss/admin-ui";
+import { t } from "@xcss/web/admin-ui/i18n";
+import { createXcssAdminApplication, errorRequestId, useAdminApplication } from "@xcss/web/admin-shell";
+import { EmptyState, ErrorState, LoadingState } from "@xcss/web/admin-ui";
 import { useEffect, useState } from "react";
 import { CURRENT_API_PREFIX, LIST_REQUEST_BUDGET, administratorApi, isCreatedInstance, isFocusedInstance, isHostListResponse, isUuid, type ClientInstanceListResponse, type Host, type HostListResponse } from "./api";
 import { Instances } from "./Instances";
 import { InstanceDetails } from "./InstanceDetails";
 import { HostLogs } from "./HostLogs";
-import { InstancePageNavigation, InstanceHeaderActions, type InstancePage, AccountPage } from "@xcss/admin-shell";
+import { InstancePageNavigation, InstanceHeaderActions, type InstancePage, AccountPage } from "@xcss/web/admin-shell";
 
 type HostPage = InstancePage | "account";
 

@@ -6,8 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=ixcss-host
-Group=ixcss-host
+User=xsos
+Group=xsos
 EnvironmentFile=/etc/isarmg/xsos.env
 ExecStart=/opt/isarmg/xsos/current/bin/xsos run --release-root /opt/isarmg/xsos/current
 StateDirectory=isarmg/xsos/db

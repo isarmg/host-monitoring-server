@@ -1,6 +1,6 @@
 [package]
 name = "xsos"
-description = "Independent host monitoring server backed by SQLite"
+description = "xsos: host telemetry server backed by SQLite"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -21,26 +21,9 @@ http-body-util.workspace = true
 mime.workspace = true
 rand.workspace = true
 rustix.workspace = true
-xcss-admin-auth.workspace = true
-xcss-admin-core.workspace = true
-xcss-admin-axum.workspace = true
-xcss-admin-sqlite.workspace = true
-xcss-contracts.workspace = true
-xcss-error.workspace = true
-xcss-platform-db.workspace = true
-xcss-schema-identity.workspace = true
-xcss-server-runtime.workspace = true
-xcss-web-assets.workspace = true
-xcss-server-target.workspace = true
-xcss-sqlite.workspace = true
-xcss-secret.workspace = true
-xcss-secret-envelope.workspace = true
+xcss.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-xcss-server-cli.workspace = true
-xcss-log.workspace = true
-xcss-config.workspace = true
-xcss-state-file.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
@@ -55,7 +38,7 @@ tempfile.workspace = true
 tower.workspace = true
 
 [build-dependencies]
-xcss-web-assets.workspace = true
+xcss.workspace = true
 
 [lints]
 workspace = true

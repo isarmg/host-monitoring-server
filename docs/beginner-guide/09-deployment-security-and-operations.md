@@ -4,7 +4,7 @@
 
 Server 只部署在 x86_64 glibc Linux，使用 root 持有的不可变版本目录，专用服务账户读取 0600 环境并写
 独立 SQLite 状态；默认回环监听，由可信 TLS reverse proxy 暴露。Client 使用各平台服务管理器和受保护
-本地状态，仅出站访问 Server。内置管理页是与 Server 同包的 React/Vite 页面，并通过 Foundation
+本地状态，仅出站访问 Server。内置管理页是与 Server 同包的 React/Vite 页面，并通过 xcss
 admin-only username Session 合同访问 API。Windows Service 与 macOS LaunchDaemon 都是 Client，不是
 Server 部署方式。
 

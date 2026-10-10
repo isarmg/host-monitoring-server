@@ -1,5 +1,5 @@
-import { t, getLocale } from "@xcss/admin-ui/i18n";
-import { EmptyState, Table } from "@xcss/admin-ui";
+import { t, getLocale } from "@xcss/web/admin-ui/i18n";
+import { EmptyState, Table } from "@xcss/web/admin-ui";
 import type { Host } from "./api";
 
 function percent(value: number | null) { return value === null ? t("未上报", "Not reported") : `${value.toFixed(1)}%`; }

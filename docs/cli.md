@@ -17,7 +17,7 @@ xsos status --config /absolute/config.json --data-dir /absolute/data --json
 
 `config validate` 读取私有 SQLite 验证快照，原库、WAL、SHM 和业务文件保持不变。`status` 查询当前监听地址的 `/readyz`，核对服务身份和真实业务就绪；端口占用、其他服务、连接失败或未就绪均返回非零退出码。`--json` 输出单个机器记录；失败返回稳定 `code/message/details` 错误记录。帮助和版本查询不要求初始化。
 
-共享配置、命令、快照与日志均固定到同一 Foundation Git 完整提交和精确版本；Web 包使用封存制品的真实 SHA-512 完整性。当前是发行候选；正式产品发布以精准 Source 的 CI 和 Release manifest 为准。正式发行必须从这些精确输入独立构建并验证最终制品。
+共享配置、命令、快照与日志均固定到同一 xcss Git 完整提交和精确版本；Web 包使用封存制品的真实 SHA-512 完整性。当前是发行候选；正式产品发布以精准 Source 的 CI 和 Release manifest 为准。正式发行必须从这些精确输入独立构建并验证最终制品。
 
 `init` 同时创建 `data_dir/logs` 私有目录；`run` 验证该目录后写入共享 JSON 日志。默认单文件上限 8 MiB、保留 4 个归档，总上限 40 MiB。配置和状态命令不打开运行日志文件。
 

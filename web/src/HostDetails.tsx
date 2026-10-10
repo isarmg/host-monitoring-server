@@ -1,8 +1,8 @@
 import { displayLabel } from "./display-labels";
-import { t, getLocale } from "@xcss/admin-ui/i18n";
+import { t, getLocale } from "@xcss/web/admin-ui/i18n";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, ConfirmDangerDialog, ErrorState, LoadingState } from "@xcss/admin-ui";
-import { errorRequestId, useAdminApplication } from "@xcss/admin-shell";
+import { Button, ConfirmDangerDialog, ErrorState, LoadingState } from "@xcss/web/admin-ui";
+import { errorRequestId, useAdminApplication } from "@xcss/web/admin-shell";
 import {
   isHistorySeriesResponse,
   isHostDetailResponse,

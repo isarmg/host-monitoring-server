@@ -15,7 +15,7 @@ pub mod store;
 pub mod telemetry;
 
 pub fn token_hash(token: &str) -> String {
-    xcss_admin_auth::token_hash_hex(token)
+    xcss::admin_auth::token_hash_hex(token)
 }
 
 mod hardware_validation;

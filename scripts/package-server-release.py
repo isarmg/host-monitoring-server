@@ -377,7 +377,7 @@ def main() -> None:
 
         run(["npm", "ci"], cwd=source / "web")
         builder = source / "web/node_modules/.bin/xcss-build-server"
-        build_config = source / "foundation-web-build.json"
+        build_config = source / "xcss-web-build.json"
         run([os.fspath(builder), "--config", os.fspath(build_config), "--mode", "release", "--web-only", "--no-install", "--dist", os.fspath(web_stage)], cwd=source)
 
         cargo_target = Path(

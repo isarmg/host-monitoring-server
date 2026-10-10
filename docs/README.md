@@ -5,7 +5,7 @@
 事实优先级依次为协议类型和当前 Schema、运行时校验、测试、发行 manifest、
 本文档。更改版本身份、HTTP 路由、报告字段或安装布局时，应在同一提交中同步对应文档。
 
-范围必须先分清：Server 与随包管理 Web 只属于 AMD64 GNU/Linux，Web 使用 React/Vite 与 Foundation
+范围必须先分清：Server 与随包管理 Web 只属于 AMD64 GNU/Linux，Web 使用 React/Vite 与 xcss
 admin-only username 合同；`xsoc` Client 继续拥有 Linux/Windows/macOS 与移动宿主边界。产品只
 文档描述当前配置、路由和持久化状态。
 
@@ -20,3 +20,5 @@ admin-only username 合同；`xsoc` Client 继续拥有 Linux/Windows/macOS 与�
 | 当前发行说明 | [releases/1.0.0.md](releases/1.0.0.md) | 本版本功能和验证范围 |
 
 工程约定与依赖来源见 [架构说明](architecture.md)，Rust unsafe 结论见 [审查记录](unsafe-audit.md)。
+
+公共支撑的职责、单体依赖、平台边界与验证方法见[公共支撑说明](common-support.md)。

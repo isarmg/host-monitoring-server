@@ -6,10 +6,10 @@ use std::{
 
 use anyhow::{Context, ensure};
 use sqlx::{Connection, SqliteConnection, SqlitePool, sqlite::SqliteConnectOptions};
-use xcss_schema_identity::SchemaIdentity;
+use xcss::schema_identity::SchemaIdentity;
 #[cfg(test)]
-use xcss_schema_identity::SchemaRow;
-use xcss_sqlite::{PRODUCT_METADATA_DDL, PoolOptions};
+use xcss::schema_identity::SchemaRow;
+use xcss::sqlite::{PRODUCT_METADATA_DDL, PoolOptions};
 
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
@@ -98,7 +98,7 @@ fn fail_initialization<T>(path: &Path, error: anyhow::Error) -> anyhow::Result<T
 }
 
 async fn checkpoint_and_sync(pool: &SqlitePool, path: &Path) -> anyhow::Result<()> {
-    xcss_sqlite::checkpoint(pool)
+    xcss::sqlite::checkpoint(pool)
         .await
         .context("checkpoint initialized xsos schema")?;
     sync_file_and_parent(path)
@@ -109,9 +109,9 @@ async fn open_pool(database_path: &Path) -> anyhow::Result<SqlitePool> {
         .with_min_connections(1)
         .with_acquire_timeout(Duration::from_secs(5))
         .with_connection_limits(connection_limits());
-    xcss_sqlite::open_existing(database_path, options)
+    xcss::sqlite::open_existing(database_path, options)
         .await
-        .context("open xsos database with the Foundation SQLite baseline")
+        .context("open xsos database with the xcss SQLite baseline")
 }
 
 /// Initializes one completely empty SQLite database with the single current
@@ -136,14 +136,14 @@ pub async fn initialize_empty(pool: &SqlitePool) -> anyhow::Result<()> {
             .as_micros(),
     )
     .context("platform creation timestamp exceeds u64")?;
-    xcss_platform_db::initialize_current_platform_metadata(
+    xcss::platform_db::initialize_current_platform_metadata(
         &mut transaction,
         "server-control-plane",
         created_at_micros,
     )
     .await
-    .context("initialize current Foundation platform metadata")?;
-    let actual = xcss_sqlite::schema_fingerprint(&mut *transaction).await?;
+    .context("initialize current xcss platform metadata")?;
+    let actual = xcss::sqlite::schema_fingerprint(&mut *transaction).await?;
     ensure!(
         actual == SCHEMA_SHA256,
         "compiled current schema fingerprint mismatch: expected {SCHEMA_SHA256}, computed {actual}"
@@ -173,10 +173,10 @@ pub async fn validate_pool(pool: &SqlitePool) -> anyhow::Result<()> {
         metadata_sql.as_deref() == Some(PRODUCT_METADATA_DDL),
         "database product_metadata schema is not the exact current contract: actual={metadata_sql:?} expected={PRODUCT_METADATA_DDL:?}"
     );
-    xcss_sqlite::require_pool_current_schema(pool, &expected_identity()?)
+    xcss::sqlite::require_pool_current_schema(pool, &expected_identity()?)
         .await
         .context("database is not the exact current xsos schema")?;
-    xcss_platform_db::require_current_platform_metadata(pool, "server-control-plane")
+    xcss::platform_db::require_current_platform_metadata(pool, "server-control-plane")
         .await
         .context("database platform metadata is not the exact current contract")?;
     Ok(())
@@ -187,7 +187,7 @@ pub async fn is_current(pool: &SqlitePool) -> bool {
 }
 
 pub async fn actual_schema_sha256(pool: &SqlitePool) -> anyhow::Result<String> {
-    xcss_sqlite::schema_fingerprint(pool)
+    xcss::sqlite::schema_fingerprint(pool)
         .await
         .context("fingerprint xsos schema")
 }
@@ -199,23 +199,23 @@ pub fn validate_configuration_database(database_url: &str) -> anyhow::Result<()>
 /// Persistent admission and source-preserving validation share one physical byte boundary.
 pub const DATABASE_BYTE_BUDGET: u64 = 8 * 1024 * 1024 * 1024;
 
-pub fn snapshot_limits() -> xcss_sqlite::SnapshotLimits {
-    xcss_sqlite::SnapshotLimits {
+pub fn snapshot_limits() -> xcss::sqlite::SnapshotLimits {
+    xcss::sqlite::SnapshotLimits {
         max_total_bytes: DATABASE_BYTE_BUDGET,
         ..Default::default()
     }
 }
 
-pub fn connection_limits() -> xcss_sqlite::ConnectionLimits {
-    xcss_sqlite::ConnectionLimits::new(2 * 1024 * 1024)
+pub fn connection_limits() -> xcss::sqlite::ConnectionLimits {
+    xcss::sqlite::ConnectionLimits::new(2 * 1024 * 1024)
 }
 
 /// Capture before this process acquires any original SQLite connection.
 pub async fn validation_snapshot(
     path: PathBuf,
-) -> anyhow::Result<xcss_sqlite::ValidationSnapshotPool> {
+) -> anyhow::Result<xcss::sqlite::ValidationSnapshotPool> {
     let snapshot = tokio::task::spawn_blocking(move || {
-        xcss_sqlite::ValidationSnapshot::capture_with_limits(path, snapshot_limits())
+        xcss::sqlite::ValidationSnapshot::capture_with_limits(path, snapshot_limits())
     })
     .await
     .context("join private database validation capture")??;
@@ -225,8 +225,8 @@ pub async fn validation_snapshot(
 }
 
 fn validate_read_only(path: &Path) -> anyhow::Result<()> {
-    let snapshot = xcss_sqlite::ValidationSnapshot::capture_with_limits(path, snapshot_limits())?;
-    xcss_sqlite::block_on_sqlite_connection(async {
+    let snapshot = xcss::sqlite::ValidationSnapshot::capture_with_limits(path, snapshot_limits())?;
+    xcss::sqlite::block_on_sqlite_connection(async {
         let mut connection = SqliteConnection::connect_with(
             &SqliteConnectOptions::new()
                 .filename(snapshot.database_path())
@@ -236,7 +236,7 @@ fn validate_read_only(path: &Path) -> anyhow::Result<()> {
         .await
         .context("open private xsos validation snapshot")?;
         let result = async {
-            xcss_sqlite::apply_connection_limits(&mut connection, connection_limits()).await?;
+            xcss::sqlite::apply_connection_limits(&mut connection, connection_limits()).await?;
             let deadline = std::time::Instant::now() + Duration::from_secs(3);
             connection
                 .lock_handle()
@@ -254,7 +254,7 @@ fn validate_read_only(path: &Path) -> anyhow::Result<()> {
                 metadata_sql.as_deref() == Some(PRODUCT_METADATA_DDL),
                 "database product_metadata schema is not the exact current contract"
             );
-            xcss_sqlite::require_current_schema(&mut connection, &expected_identity()?)
+            xcss::sqlite::require_current_schema(&mut connection, &expected_identity()?)
                 .await
                 .context("database is not the exact current xsos schema")?;
             let platform_metadata: (i64, i64, String, i64) = sqlx::query_as(
@@ -263,10 +263,11 @@ fn validate_read_only(path: &Path) -> anyhow::Result<()> {
             )
             .fetch_one(&mut connection)
             .await
-            .context("read current Foundation platform metadata")?;
+            .context("read current xcss platform metadata")?;
             ensure!(
-                platform_metadata.0 == i64::from(xcss_platform_db::PLATFORM_GENERATION)
-                    && platform_metadata.1 == i64::from(xcss_platform_db::PLATFORM_SCHEMA_REVISION)
+                platform_metadata.0 == i64::from(xcss::platform_db::PLATFORM_GENERATION)
+                    && platform_metadata.1
+                        == i64::from(xcss::platform_db::PLATFORM_SCHEMA_REVISION)
                     && platform_metadata.2 == "server-control-plane"
                     && platform_metadata.3 >= 0,
                 "database platform metadata is not the exact current contract"
@@ -355,7 +356,7 @@ mod tests {
             ),
         ];
         assert_eq!(
-            xcss_schema_identity::schema_fingerprint(&rows).unwrap(),
+            xcss::schema_identity::schema_fingerprint(&rows).unwrap(),
             "c51a04c9248c03f8637dadfa8aafad30bd3f233b474f464f807892071c010049"
         );
     }

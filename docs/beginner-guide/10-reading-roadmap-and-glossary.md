@@ -34,7 +34,7 @@ writer、retention、release 验证和 Web 调用。
 |---|---|
 | Client / `xsoc` | 受管主机上的当前客户端产品 |
 | Server / `xsos` | 只支持 `x86_64-unknown-linux-gnu` 的控制面；不等于跨平台 Client |
-| administrator username | Foundation 规范化的本地管理标识；默认 `admin`，不是 email |
+| administrator username | xcss 规范化的本地管理标识；默认 `admin`，不是 email |
 | admin role | 唯一管理角色；没有 viewer/operator/RBAC，与 username 文本是两件事 |
 | binding | Host identity 与服务端 credential 的当前原子绑定 |
 | pairing | invite/code、Client request/poll 和 Server 原子绑定设备 credential 的流程 |

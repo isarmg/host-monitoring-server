@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { requestJson } from "@xcss/http-client";
+import { requestJson } from "@xcss/web/http-client";
 
 globalThis.location ??= { href: "http://127.0.0.1/" };
 const {

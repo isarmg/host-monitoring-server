@@ -60,7 +60,7 @@ Server 仓库固定 Rust `1.99.0`。服务端 Web 还需要其 lockfile 对应�
 ```bash
 rustup toolchain install 1.99.0
 npm --prefix web ci
-web/node_modules/.bin/xcss-build-server --config foundation-web-build.json --mode development --no-install
+web/node_modules/.bin/xcss-build-server --config xcss-web-build.json --mode development --no-install
 cargo +1.99.0 check --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
 cargo +1.99.0 test --workspace --locked --target x86_64-unknown-linux-gnu
 ```
@@ -89,7 +89,7 @@ cargo run --target x86_64-unknown-linux-gnu -p xsos -- run
 以上环境变量须先导出到当前 Shell，初始密码须为 12..1024 字节且无 ASCII control，并配置有效的 `XSOC_AUTHORIZATION_KEY`（标准 Base64 的 32 个随机字节）。`init` 只执行一次且拒绝覆盖已有数据，后续启动只执行 `run`。开发模式仍应绑定回环。正式 source-bound 二进制要求验证过的发行树与 `run --release-root`。
 Server 不提供 ARM Linux、musl、Windows 或 macOS 构建；这些平台描述均只适用于 Client。
 
-这里的 `admin` 是默认 username，Foundation 固定的是 `role=admin`，并非要求 username 只能叫 admin。
+这里的 `admin` 是默认 username，xcss 固定的是 `role=admin`，并非要求 username 只能叫 admin。
 当前登录 JSON 只有 `{username,password}`；成功 Session 只有
 `{authenticated,user_id,username,role,csrf_token}`。候选 username 为 1..64 字节 printable ASCII，
 Server trim ASCII whitespace、转 ASCII 小写后要求 3..64 字节 canonical 值：首尾字母/数字、字符仅
@@ -160,4 +160,4 @@ SQLite writer 批量事务写入，每个报告使用 savepoint 隔离。只有�
 - **移动宿主 contract**：当前只是 Rust library API；仓库没有稳定 C ABI/FFI 包装、移动 UI 或 APK/IPA。
 - **fail closed**：不能证明当前身份、安全路径或数据完整时拒绝运行。
 
-开发默认使用二进制内嵌 Web；`XCSS_DEV_WEB_DIR` 可省略。显式设置它时选择 Foundation 开发目录 provider，Web 重新构建即生效。正式 source-bound 发行始终内嵌 Web，拒绝此变量。
+开发默认使用二进制内嵌 Web；`XCSS_DEV_WEB_DIR` 可省略。显式设置它时选择 xcss 开发目录 provider，Web 重新构建即生效。正式 source-bound 发行始终内嵌 Web，拒绝此变量。

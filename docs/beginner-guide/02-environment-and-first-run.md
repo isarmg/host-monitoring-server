@@ -3,8 +3,8 @@
 ## 2.1 工具链
 
 仓库固定 Rust `1.99.0` 与 `.node-version` 中的 Node `26.7.0`。Server Web 使用 lockfile 对应的 npm。
-这个 Node 版本同时满足 Foundation Server 0.10.8 包的 engine 合同；React `19.3.0`、Vite `8.3.3` 与 TypeScript
-`5.8.3` 由 `@xcss/admin-web` 的 `ADMIN_WEB_TOOLCHAIN` 精确门禁。Linux 常规开发可覆盖协议和服务端
+这个 Node 版本同时满足 xcss 1.0.0 包的 engine 合同；React `19.3.0`、Vite `8.3.3` 与 TypeScript
+`5.8.3` 由 `@xcss/web/admin-web` 的 `ADMIN_WEB_TOOLCHAIN` 精确门禁。Linux 常规开发可覆盖协议和服务端
 逻辑；Server 的唯一目标是 `x86_64-unknown-linux-gnu`，所以完整 workspace 门禁和 Server 启动必须在
 x86_64 glibc Linux 执行。Client 源码、Windows MSI、macOS pkg 以及真实平台采集在独立
 `xsoc` 仓库及其 CI 中验证。
@@ -12,7 +12,7 @@ x86_64 glibc Linux 执行。Client 源码、Windows MSI、macOS pkg 以及真实
 ```bash
 rustup toolchain install 1.99.0
 npm --prefix web ci
-web/node_modules/.bin/xcss-build-server --config foundation-web-build.json --mode development --no-install
+web/node_modules/.bin/xcss-build-server --config xcss-web-build.json --mode development --no-install
 cargo +1.99.0 metadata --no-deps
 cargo +1.99.0 check --workspace --locked --target x86_64-unknown-linux-gnu --all-targets --all-features
 ```
@@ -96,4 +96,4 @@ activation 端点。不要跳过配对后把 401 当作采集器故障。
 门禁。此时只建立基线，不改 fingerprint、数据库或配置来“让测试通过”。如果基线失败，先记录环境与
 错误层次。
 
-开发默认使用二进制内嵌 Web；`XCSS_DEV_WEB_DIR` 可省略。显式设置它时选择 Foundation 开发目录 provider，Web 重新构建即生效。正式 source-bound 发行始终内嵌 Web，拒绝此变量。
+开发默认使用二进制内嵌 Web；`XCSS_DEV_WEB_DIR` 可省略。显式设置它时选择 xcss 开发目录 provider，Web 重新构建即生效。正式 source-bound 发行始终内嵌 Web，拒绝此变量。

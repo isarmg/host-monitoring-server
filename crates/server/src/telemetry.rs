@@ -313,7 +313,7 @@ impl TelemetryWriterTask {
         mut shutdown: tokio::sync::watch::Receiver<bool>,
     ) -> Result<(), String> {
         tokio::select! {
-            _ = xcss_server_runtime::wait_for_shutdown(&mut shutdown) => {
+            _ = xcss::server_runtime::wait_for_shutdown(&mut shutdown) => {
                 self.shutdown().await.map_err(|error| error.to_string())
             }
             result = &mut self.join => result.map_err(|error| error.to_string()),

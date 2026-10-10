@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use tokio::task::JoinSet;
 use tower::ServiceExt;
 use uuid::Uuid;
-use xcss_error::ErrorEnvelope;
+use xcss::error::ErrorEnvelope;
 use xsos::{
     http::{AppState, router},
     model,
@@ -156,7 +156,7 @@ fn application(pool: SqlitePool, writer: TelemetryWriter) -> Router {
     router(
         AppState::with_telemetry_writer(
             pool,
-            xcss_admin_auth::AdministratorOriginMode::LoopbackDevelopmentHttp,
+            xcss::admin_auth::AdministratorOriginMode::LoopbackDevelopmentHttp,
             writer,
             xsos::crypto::SecretBox::new([0x42; 32]),
         ),
@@ -288,7 +288,7 @@ async fn router_authentication_binding_body_and_validation_all_precede_enqueue()
 
 #[tokio::test]
 async fn foundation_shutdown_drains_the_writer_and_stops_retention() {
-    use xcss_server_runtime::{ServerRuntime, TaskCriticality, TaskState};
+    use xcss::server_runtime::{ServerRuntime, TaskCriticality, TaskState};
     use xsos::{
         http::product_descriptor,
         retention::{RetentionConfig, RetentionMaintenance},

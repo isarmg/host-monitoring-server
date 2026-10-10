@@ -81,7 +81,7 @@ jobs:
       - name: Prepare embedded browser assets
         run: |
           npm --prefix web ci
-          web/node_modules/.bin/xcss-build-server --config foundation-web-build.json --mode development --web-only --no-install
+          web/node_modules/.bin/xcss-build-server --config xcss-web-build.json --mode development --web-only --no-install
       - name: Check Server and protocol
         run: >-
           cargo check --locked --target x86_64-unknown-linux-gnu

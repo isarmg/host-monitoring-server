@@ -1,6 +1,6 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use xcss_server_target::SERVER_TARGET_TRIPLE;
+use xcss::server_target::SERVER_TARGET_TRIPLE;
 
 use crate::database_schema::{
     APPLICATION, APPLICATION_VERSION, SCHEMA_APPLICATION_VERSION, SCHEMA_REVISION, SCHEMA_SHA256,

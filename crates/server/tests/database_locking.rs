@@ -76,8 +76,8 @@ async fn lock_identity_survives_working_directory_and_sqlite_restarts() {
 
     // Current CLI configuration has an absolute database authority, independent
     // of the child process working directory. Both lock protocols cover it.
-    xcss_server_cli::create_runtime_log_directory(directory.path()).unwrap();
-    let state_directory = xcss_state_file::PrivateStateDirectory::open(directory.path()).unwrap();
+    xcss::server_cli::create_runtime_log_directory(directory.path()).unwrap();
+    let state_directory = xcss::state_file::PrivateStateDirectory::open(directory.path()).unwrap();
     let common = state_directory.try_instance_lock().unwrap();
     let application = ApplicationLock::acquire(&url).expect("acquire application lock");
     assert!(ApplicationLock::acquire(&url).is_err());

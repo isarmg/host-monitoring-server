@@ -1,6 +1,6 @@
-import { t } from "@xcss/admin-ui/i18n";
-import { Button, EmptyState, ErrorState, FormField, LoadingState, TextField } from "@xcss/admin-ui";
-import { errorRequestId, useAdminApplication } from "@xcss/admin-shell";
+import { t } from "@xcss/web/admin-ui/i18n";
+import { Button, EmptyState, ErrorState, FormField, LoadingState, TextField } from "@xcss/web/admin-ui";
+import { errorRequestId, useAdminApplication } from "@xcss/web/admin-shell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isFocusedInstance, isNoContent, LIST_REQUEST_BUDGET, type ClientInstanceListResponse } from "./api";
 import { HostDetails } from "./HostDetails";
